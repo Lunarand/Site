@@ -24,24 +24,40 @@ jobs:
       - name: 📦 Install Dependencies
         run: npm install
 
-      - name: 🚀 Start Server
+      - name: 🚀 Start Server (quiet)
         env:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
           nohup npm start > server.log 2>&1 &
           sleep 2
-          echo "-------------------------------------------"
-          echo "✅ Server started. Recent logs:"
-          echo "-------------------------------------------"
-          tail -n 40 server.log || true
+          echo "====================================================="
+          echo "✅ Server is running on http://localhost:3000"
+          echo "====================================================="
 
-      - name: 🌐 Start Cloudflare Tunnel (prints public URL)
+      - name: 🌐 Start Cloudflare Tunnel (CLEAN URL OUTPUT)
         run: |
-          curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          # Download cloudflared quietly (no progress spam)
+          curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
           chmod +x cloudflared
 
-          echo "-----------------------------------------------------"
-          echo "🔗 YOUR WEBSITE URL (look for trycloudflare.com):"
-          echo "-----------------------------------------------------"
+          echo ""
+          echo "====================================================="
+          echo "🌍 DEADCHATS PUBLIC LINK"
+          echo "====================================================="
+          echo ""
 
-          ./cloudflared tunnel --url http://localhost:3000
+          # Run tunnel and ONLY show the URL + status
+          ./cloudflared tunnel --url http://localhost:3000 2>&1 | awk '
+            /https:\/\/.*trycloudflare\.com/ {
+              print "=====================================================";
+              print "🔗 YOUR WEBSITE URL:";
+              print $0;
+              print "=====================================================";
+              print "";
+              printed=1
+            }
+            printed && /Registered tunnel connection/ {
+              print "✅ Tunnel is LIVE. Keep this workflow running.";
+              fflush()
+            }
+          '
