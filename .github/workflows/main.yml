@@ -1,0 +1,39 @@
+name: DeadChats Server
+
+on:
+  workflow_dispatch: # Allows you to manually click "Run"
+
+jobs:
+  launch-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6 Hours max
+
+    steps:
+    - name: 📥 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🟢 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: 📦 Install Dependencies
+      run: npm install
+
+    - name: 🚀 Start Server & Tunnel
+      run: |
+        # 1. Start the Node.js server in the background
+        npm start &
+        
+        # 2. Wait 5 seconds for server to be ready
+        sleep 5
+        
+        # 3. Download Cloudflare Tunnel (cloudflared)
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+        chmod +x cloudflared-linux-amd64
+        
+        # 4. Start the Tunnel and print the URL
+        echo "-----------------------------------------------------"
+        echo "🔗 YOUR WEBSITE URL IS BELOW (Click the trycloudflare link):"
+        echo "-----------------------------------------------------"
+        ./cloudflared-linux-amd64 tunnel --url http://localhost:3000
