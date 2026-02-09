@@ -3,32 +3,46 @@ name: DeadChats Server
 on:
   workflow_dispatch:
 
+concurrency:
+  group: deadchats-tunnel
+  cancel-in-progress: true
+
 jobs:
   launch-site:
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
-    - name: 📥 Checkout Code
-      uses: actions/checkout@v4
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
 
-    - name: 🟢 Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
 
-    - name: 📦 Install Dependencies
-      run: npm install
+      - name: 📦 Install Dependencies
+        run: npm ci
 
-    - name: 🚀 Start Server & Tunnel
-      env:
-        ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }} # <--- THIS PASSES YOUR SECRET
-      run: |
-        npm start &
-        sleep 5
-        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-        chmod +x cloudflared-linux-amd64
-        echo "-----------------------------------------------------"
-        echo "🔗 YOUR WEBSITE URL IS BELOW:"
-        echo "-----------------------------------------------------"
-        ./cloudflared-linux-amd64 tunnel --url http://localhost:3000
+      - name: 🚀 Start Server
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          nohup npm start > server.log 2>&1 &
+          sleep 2
+          echo "-------------------------------------------"
+          echo "✅ Server started. Recent logs:"
+          echo "-------------------------------------------"
+          tail -n 40 server.log || true
+
+      - name: 🌐 Start Cloudflare Tunnel (prints public URL)
+        run: |
+          curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+
+          echo "-----------------------------------------------------"
+          echo "🔗 YOUR WEBSITE URL (look for trycloudflare.com):"
+          echo "-----------------------------------------------------"
+
+          ./cloudflared tunnel --url http://localhost:3000
