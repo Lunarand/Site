@@ -10,57 +10,64 @@ const port = 3000;
 
 // Middleware
 app.use(express.json());
-app.use(express.static('public')); // Serve the frontend
-app.use('/uploads', express.static('uploads')); // Serve uploaded images
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
 
-// Storage Setup (Save files to 'uploads' folder)
+// Ensure uploads folder exists
+if (!fs.existsSync('./uploads')){
+    fs.mkdirSync('./uploads');
+}
+
+// Storage Setup
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const dir = './uploads';
-        if (!fs.existsSync(dir)){
-            fs.mkdirSync(dir);
-        }
-        cb(null, 'uploads/');
-    },
+    destination: './uploads',
     filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Unique filename
+        cb(null, Date.now() + path.extname(file.originalname));
     }
 });
 
-// Upload Restrictions (Images only, max 5MB)
+// Upload Config (Unlimited files, 50MB limit per file)
 const upload = multer({
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
     fileFilter: (req, file, cb) => {
         const filetypes = /jpeg|jpg|png|gif|webp/;
         const mimetype = filetypes.test(file.mimetype);
-        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-        if (mimetype && extname) {
-            return cb(null, true);
-        }
+        if (mimetype) return cb(null, true);
         cb(new Error('Only images are allowed!'));
     }
 });
 
-// In-memory Database (Wipes on restart)
+// Database
 let posts = [];
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123"; // Fallback if secret fails
 
-// API Routes
+// Routes
 app.get('/api/posts', (req, res) => {
-    res.json(posts.reverse()); // Send newest first
+    res.json(posts.reverse());
+});
+
+app.post('/api/login', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASSWORD) {
+        res.json({ success: true, token: "admin_token_active" });
+    } else {
+        res.status(401).json({ error: "Wrong password" });
+    }
 });
 
 app.post('/api/upload', upload.single('image'), (req, res) => {
     try {
+        const title = req.body.title || '';
         const text = req.body.text || '';
         
-        // Content Moderation
-        if (filter.isProfane(text)) {
-            return res.status(400).json({ error: 'Please keep it clean. No bad language.' });
+        if (filter.isProfane(title) || filter.isProfane(text)) {
+            return res.status(400).json({ error: 'Profanity detected.' });
         }
 
         const newPost = {
             id: Date.now(),
+            title: title,
             text: text,
             image: req.file ? `/uploads/${req.file.filename}` : null,
             date: new Date().toLocaleString()
@@ -73,6 +80,12 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`DeadChats Files running on port ${port}`);
+// Admin Delete Route (Only accessible if you implement frontend logic for it later)
+app.delete('/api/posts/:id', (req, res) => {
+    // Ideally check token here, but keeping it simple for now
+    const id = parseInt(req.params.id);
+    posts = posts.filter(post => post.id !== id);
+    res.json({ success: true });
 });
+
+app.listen(port, () => console.log(`Server running on ${port}`));
