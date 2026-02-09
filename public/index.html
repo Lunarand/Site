@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeadChats Files</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f0f0f; color: #e0e0e0; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-4">
+
+    <!-- Header -->
+    <header class="w-full max-w-2xl mt-8 mb-6 text-center">
+        <h1 class="text-4xl font-bold tracking-tighter text-white">DeadChats <span class="text-emerald-500">Files</span></h1>
+        <p class="text-gray-500 mt-2 text-sm">Anonymous & Temporary File Sharing</p>
+    </header>
+
+    <!-- Upload Form -->
+    <div class="glass w-full max-w-2xl p-6 rounded-2xl shadow-xl mb-8">
+        <form id="uploadForm" class="space-y-4">
+            <textarea id="postText" placeholder="Write something..." class="w-full bg-black/30 text-white p-3 rounded-lg border border-gray-700 focus:outline-none focus:border-emerald-500 resize-none h-24"></textarea>
+            
+            <div class="flex items-center justify-between">
+                <label class="cursor-pointer text-gray-400 hover:text-emerald-400 transition flex items-center gap-2">
+                    <input type="file" id="postImage" class="hidden" accept="image/*">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span id="fileName" class="text-xs">Add Image</span>
+                </label>
+                
+                <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-medium transition shadow-lg shadow-emerald-900/20">Post</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Feed -->
+    <div id="feed" class="w-full max-w-2xl space-y-6 pb-20">
+        <!-- Posts will appear here -->
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const fileInput = document.getElementById('postImage');
+        const fileNameDisplay = document.getElementById('fileName');
+
+        // Show filename when selected
+        fileInput.addEventListener('change', () => {
+            if(fileInput.files.length > 0) fileNameDisplay.textContent = fileInput.files[0].name;
+        });
+
+        // Handle Submit
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('text', document.getElementById('postText').value);
+            if (fileInput.files[0]) {
+                formData.append('image', fileInput.files[0]);
+            }
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    document.getElementById('postText').value = '';
+                    fileInput.value = '';
+                    fileNameDisplay.textContent = 'Add Image';
+                    loadPosts(); // Refresh feed
+                } else {
+                    alert(data.error || 'Upload failed');
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error uploading post');
+            }
+        });
+
+        // Load Posts
+        async function loadPosts() {
+            const res = await fetch('/api/posts');
+            const posts = await res.json();
+            const feed = document.getElementById('feed');
+            feed.innerHTML = '';
+
+            posts.forEach(post => {
+                const postEl = document.createElement('div');
+                postEl.className = 'glass p-5 rounded-xl border-l-4 border-emerald-500/50 animate-fade-in';
+                
+                let imageHtml = '';
+                if (post.image) {
+                    imageHtml = `<img src="${post.image}" class="mt-3 rounded-lg w-full object-cover max-h-96 border border-gray-700/50">`;
+                }
+
+                postEl.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs text-gray-500 font-mono">Anonymous • ${post.date}</span>
+                    </div>
+                    <p class="text-gray-200 whitespace-pre-wrap">${post.text}</p>
+                    ${imageHtml}
+                `;
+                feed.appendChild(postEl);
+            });
+        }
+
+        // Load posts on start
+        loadPosts();
+    </script>
+</body>
+</html>
