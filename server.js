@@ -3,26 +3,22 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Filter = require('bad-words');
+const UAParser = require('ua-parser-js');
 
 const app = express();
 const filter = new Filter();
 const port = 3000;
 
-app.set('trust proxy', true); // IMPORTANT for IP behind tunnel/proxy
-
 app.use(express.json());
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
 
-// ----- Uploads folder -----
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync('./uploads')) {
+  fs.mkdirSync('./uploads');
 }
 
-// ----- Multer -----
 const storage = multer.diskStorage({
-  destination: uploadsDir,
+  destination: './uploads',
   filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 
@@ -37,223 +33,222 @@ const upload = multer({
   }
 });
 
-// ----- Auth -----
+// -------------------- AUTH / STATE --------------------
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-const ADMIN_TOKEN = "admin_token_active";
+const ADMIN_TOKEN = "admin_token_active"; // kept same pattern as your existing UI expects
+
+let maintenanceMode = false;
+let bannedIps = new Set();
+let posts = [];    // newest appended; UI reverses
+let reports = [];  // {id, postId, reason, message, reporterIp, timestamp}
+
+// -------------------- IP HELPERS --------------------
+function getClientIp(req) {
+  // Cloudflare Tunnel commonly sets CF-Connecting-IP
+  const cf = req.headers['cf-connecting-ip'];
+  if (cf) return String(cf).split(',')[0].trim();
+
+  // Standard reverse proxy header
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) return String(xff).split(',')[0].trim();
+
+  // Express / Node fallback
+  return (req.socket && req.socket.remoteAddress) ? String(req.socket.remoteAddress) : "unknown";
+}
+
+function isBanned(req) {
+  const ip = getClientIp(req);
+  return bannedIps.has(ip);
+}
 
 function requireAdmin(req, res, next) {
-  const token = req.headers["x-admin-token"];
-  if (token !== ADMIN_TOKEN) return res.status(403).json({ error: "Admin only" });
+  const token = req.headers['x-admin-token'];
+  if (token && token === ADMIN_TOKEN) return next();
+  return res.status(403).json({ error: "Admin only" });
+}
+
+function requireNotBannedAndNotMaintenance(req, res, next) {
+  if (isBanned(req)) return res.status(403).json({ error: "You are banned." });
+  if (maintenanceMode) return res.status(403).json({ error: "Site under maintenance." });
   next();
 }
 
-// ----- IP helpers -----
-function getClientIp(req) {
-  // prefer Cloudflare header if present
-  const cf = req.headers["cf-connecting-ip"];
-  if (cf) return String(cf);
-
-  const xff = req.headers["x-forwarded-for"];
-  if (xff) return String(xff).split(",")[0].trim();
-
-  const ip = req.ip || req.socket?.remoteAddress || "";
-  return String(ip).replace("::ffff:", "");
+function nowStr() {
+  return new Date().toLocaleString();
 }
 
-// ----- In-memory "database" -----
-let posts = [];       // {id,title,text,image,date, ownerIp, likesByIp:Set, dislikesByIp:Set, comments:[...]}
-let reports = [];     // {id, postId, reason, message, reporterIp, timestamp}
-let bannedIps = new Set();
-let maintenanceMode = false;
-
-// ----- Utilities to sanitize data for normal users -----
-function publicPostSummary(post) {
-  return {
-    id: post.id,
-    title: post.title,
-    text: post.text,
-    image: post.image,
-    date: post.date,
-    likes: post.likesByIp.size,
-    dislikes: post.dislikesByIp.size,
-    comments: post.comments.length
-  };
-}
-
-function publicPostDetail(post) {
-  return {
-    id: post.id,
-    title: post.title,
-    text: post.text,
-    image: post.image,
-    date: post.date,
-    likes: post.likesByIp.size,
-    dislikes: post.dislikesByIp.size,
-    comments: post.comments.map(c => ({
-      id: c.id,
-      text: c.text,
-      date: c.date
-    }))
-  };
-}
-
-// ----- Restrictions for normal users during maintenance / ban -----
-function blockIfBannedOrMaintenance(req, res, next) {
-  const ip = getClientIp(req);
-
-  // Admin bypass: if valid admin token, allow
-  const token = req.headers["x-admin-token"];
-  const isAdmin = token === ADMIN_TOKEN;
-
-  if (!isAdmin && maintenanceMode) {
-    return res.status(503).json({ error: "Maintenance mode" });
-  }
-  if (!isAdmin && bannedIps.has(ip)) {
-    return res.status(403).json({ error: "You are banned." });
-  }
-  next();
-}
-
-// ----- Basic endpoints -----
-app.get('/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-
+// -------------------- BASIC ROUTES --------------------
 app.get('/api/status', (req, res) => {
   res.json({ maintenance: maintenanceMode });
 });
 
-// ----- Login -----
 app.post('/api/login', (req, res) => {
   const { password } = req.body || {};
   if (password === ADMIN_PASSWORD) {
-    res.json({ success: true, token: ADMIN_TOKEN });
-  } else {
-    res.status(401).json({ error: "Wrong password" });
+    return res.json({ success: true, token: ADMIN_TOKEN });
   }
+  return res.status(401).json({ error: "Wrong password" });
 });
 
-app.get('/api/admin/status', requireAdmin, (req, res) => {
-  res.json({ ok: true, maintenance: maintenanceMode, bannedCount: bannedIps.size, reportsCount: reports.length });
-});
-
-// ----- Posts (public) -----
 app.get('/api/posts', (req, res) => {
-  // newest first without mutating
-  const list = [...posts].reverse().map(publicPostSummary);
-  res.json(list);
+  // normal users must never see IPs
+  const safe = posts.map(p => ({
+    id: p.id,
+    title: p.title,
+    text: p.text,
+    image: p.image,
+    date: p.date,
+    likes: p.likes,
+    dislikes: p.dislikes,
+    comments: p.comments.length
+  }));
+  res.json(safe.reverse());
 });
 
 app.get('/api/posts/:id', (req, res) => {
   const id = parseInt(req.params.id);
   const post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: "Not found" });
-  res.json(publicPostDetail(post));
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  // normal users must never see IPs
+  return res.json({
+    id: post.id,
+    title: post.title,
+    text: post.text,
+    image: post.image,
+    date: post.date,
+    likes: post.likes,
+    dislikes: post.dislikes,
+    comments: post.comments.map(c => ({ text: c.text, date: c.date }))
+  });
 });
 
-// ----- Upload post -----
-app.post('/api/upload', blockIfBannedOrMaintenance, upload.single('image'), (req, res) => {
+// -------------------- UPLOAD (CREATE POST) --------------------
+app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.single('image'), (req, res) => {
   try {
-    const ip = getClientIp(req);
-    const title = req.body.title || '';
-    const text = req.body.text || '';
+    const title = (req.body.title || '').toString();
+    const text = (req.body.text || '').toString();
 
     if (filter.isProfane(title) || filter.isProfane(text)) {
       return res.status(400).json({ error: 'Profanity detected.' });
     }
 
+    const ip = getClientIp(req);
+    const ua = req.headers['user-agent'] || '';
+    const createdAt = Date.now();
+
     const newPost = {
-      id: Date.now(),
+      id: createdAt,
       title,
       text,
       image: req.file ? `/uploads/${req.file.filename}` : null,
-      date: new Date().toLocaleString(),
+      date: nowStr(),
+
+      // interactions
+      likes: 0,
+      dislikes: 0,
+      comments: [],
+
+      // anti-spam / per-IP tracking
+      likedBy: new Set(),
+      dislikedBy: new Set(),
+
+      // admin-only metadata
       ownerIp: ip,
-      likesByIp: new Set(),
-      dislikesByIp: new Set(),
-      comments: []
+      ownerUa: ua,
+      ownerCreatedAt: createdAt,
+      ownerHeaders: {
+        acceptLanguage: req.headers['accept-language'] || '',
+        referer: req.headers['referer'] || '',
+        cfRay: req.headers['cf-ray'] || '',
+        cfIpcountry: req.headers['cf-ipcountry'] || ''
+      }
     };
 
     posts.push(newPost);
-    res.status(201).json(publicPostSummary(newPost));
+    return res.status(201).json({
+      id: newPost.id,
+      title: newPost.title,
+      text: newPost.text,
+      image: newPost.image,
+      date: newPost.date,
+      likes: newPost.likes,
+      dislikes: newPost.dislikes,
+      comments: 0
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    return res.status(400).json({ error: error.message });
   }
 });
 
-// ----- Likes / Dislikes -----
-app.post('/api/posts/:id/like', blockIfBannedOrMaintenance, (req, res) => {
+// -------------------- LIKE / DISLIKE --------------------
+app.post('/api/posts/:id/like', requireNotBannedAndNotMaintenance, (req, res) => {
+  const id = parseInt(req.params.id);
+  const post = posts.find(p => p.id === id);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
   const ip = getClientIp(req);
-  const id = parseInt(req.params.id);
-  const post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: "Not found" });
 
-  // toggle like; remove dislike if present
-  if (post.likesByIp.has(ip)) {
-    post.likesByIp.delete(ip);
-  } else {
-    post.likesByIp.add(ip);
-    post.dislikesByIp.delete(ip);
+  // prevent multiple votes from same IP
+  if (post.likedBy.has(ip)) return res.status(400).json({ error: "Already liked" });
+
+  // if previously disliked, remove dislike
+  if (post.dislikedBy.has(ip)) {
+    post.dislikedBy.delete(ip);
+    post.dislikes = Math.max(0, post.dislikes - 1);
   }
 
-  res.json({ likes: post.likesByIp.size, dislikes: post.dislikesByIp.size });
+  post.likedBy.add(ip);
+  post.likes += 1;
+
+  return res.json({ likes: post.likes, dislikes: post.dislikes });
 });
 
-app.post('/api/posts/:id/dislike', blockIfBannedOrMaintenance, (req, res) => {
+app.post('/api/posts/:id/dislike', requireNotBannedAndNotMaintenance, (req, res) => {
+  const id = parseInt(req.params.id);
+  const post = posts.find(p => p.id === id);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
   const ip = getClientIp(req);
-  const id = parseInt(req.params.id);
-  const post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: "Not found" });
 
-  // toggle dislike; remove like if present
-  if (post.dislikesByIp.has(ip)) {
-    post.dislikesByIp.delete(ip);
-  } else {
-    post.dislikesByIp.add(ip);
-    post.likesByIp.delete(ip);
+  if (post.dislikedBy.has(ip)) return res.status(400).json({ error: "Already disliked" });
+
+  if (post.likedBy.has(ip)) {
+    post.likedBy.delete(ip);
+    post.likes = Math.max(0, post.likes - 1);
   }
 
-  res.json({ likes: post.likesByIp.size, dislikes: post.dislikesByIp.size });
+  post.dislikedBy.add(ip);
+  post.dislikes += 1;
+
+  return res.json({ likes: post.likes, dislikes: post.dislikes });
 });
 
-// ----- Comments -----
-app.post('/api/posts/:id/comment', blockIfBannedOrMaintenance, (req, res) => {
-  const ip = getClientIp(req);
+// -------------------- COMMENTS --------------------
+app.post('/api/posts/:id/comment', requireNotBannedAndNotMaintenance, (req, res) => {
   const id = parseInt(req.params.id);
   const post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: "Not found" });
+  if (!post) return res.status(404).json({ error: "Post not found" });
 
-  const text = (req.body?.text || "").toString().trim();
-  if (!text) return res.status(400).json({ error: "Comment required" });
+  const text = (req.body && req.body.text ? String(req.body.text) : "").trim();
+  if (!text) return res.status(400).json({ error: "Empty comment" });
 
-  if (filter.isProfane(text)) {
-    return res.status(400).json({ error: "Profanity detected." });
-  }
+  if (filter.isProfane(text)) return res.status(400).json({ error: "Profanity detected." });
 
-  const c = {
-    id: Date.now(),
-    text,
-    date: new Date().toLocaleString(),
-    ip // stored for admin-only but not shown to users
-  };
-
-  post.comments.push(c);
-
-  res.status(201).json({
-    comments: post.comments.length,
-    comment: { id: c.id, text: c.text, date: c.date }
-  });
+  post.comments.push({ text, date: nowStr() });
+  return res.json({ comments: post.comments.length });
 });
 
-// ----- Reports -----
-app.post('/api/posts/:id/report', blockIfBannedOrMaintenance, (req, res) => {
-  const reporterIp = getClientIp(req);
-  const id = parseInt(req.params.id);
-  const post = posts.find(p => p.id === id);
-  if (!post) return res.status(404).json({ error: "Not found" });
+// -------------------- REPORTING --------------------
+app.post('/api/posts/:id/report', requireNotBannedAndNotMaintenance, (req, res) => {
+  const postId = parseInt(req.params.id);
+  const post = posts.find(p => p.id === postId);
+  if (!post) return res.status(404).json({ error: "Post not found" });
 
-  const reason = (req.body?.reason || "").toString().trim();
-  const message = (req.body?.message || "").toString().trim();
+  const reason = (req.body && req.body.reason ? String(req.body.reason) : "").trim();
+  const message = (req.body && req.body.message ? String(req.body.message) : "").trim();
 
-  const allowedReasons = new Set([
+  const allowed = new Set([
     "Spam",
     "Hate or abuse",
     "Illegal content",
@@ -262,138 +257,194 @@ app.post('/api/posts/:id/report', blockIfBannedOrMaintenance, (req, res) => {
     "Something else"
   ]);
 
-  if (!allowedReasons.has(reason)) {
-    return res.status(400).json({ error: "Invalid reason" });
-  }
+  if (!allowed.has(reason)) return res.status(400).json({ error: "Invalid reason" });
+  if (reason === "Something else" && !message) return res.status(400).json({ error: "Please explain (Something else)" });
 
-  if (reason === "Something else" && message.length < 3) {
-    return res.status(400).json({ error: "Please explain (Something else)" });
-  }
+  const reporterIp = getClientIp(req);
 
   const r = {
     id: Date.now(),
-    postId: post.id,
+    postId,
     reason,
-    message: message || null,
+    message: message || "",
     reporterIp,
-    timestamp: new Date().toISOString()
+    timestamp: nowStr()
   };
-
   reports.push(r);
-  res.status(201).json({ success: true });
+
+  return res.json({ success: true });
 });
 
-// ----- Existing delete route (kept) now admin-only -----
-app.delete('/api/posts/:id', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id);
-
-  // remove post
-  posts = posts.filter(p => p.id !== id);
-
-  // remove reports for that post
-  reports = reports.filter(r => r.postId !== id);
-
-  res.json({ success: true });
+// -------------------- ADMIN STATUS --------------------
+app.get('/api/admin/status', requireAdmin, (req, res) => {
+  return res.json({
+    maintenance: maintenanceMode,
+    bannedCount: bannedIps.size,
+    reportsCount: reports.length
+  });
 });
 
-// =========================
-// ===== ADMIN ROUTES ======
-// =========================
-
-// View all posts (with owner IP, commenter IP hidden from normal users)
+// -------------------- ADMIN POSTS --------------------
 app.get('/api/admin/posts', requireAdmin, (req, res) => {
-  const out = [...posts].reverse().map(p => ({
+  const out = posts.slice().reverse().map(p => ({
     id: p.id,
     title: p.title,
     text: p.text,
     image: p.image,
     date: p.date,
-    ownerIp: p.ownerIp,
-    likes: p.likesByIp.size,
-    dislikes: p.dislikesByIp.size,
-    comments: p.comments.map(c => ({
-      id: c.id,
-      text: c.text,
-      date: c.date,
-      ip: c.ip
-    }))
+    likes: p.likes,
+    dislikes: p.dislikes,
+    comments: p.comments,
+    ownerIp: p.ownerIp
   }));
   res.json(out);
 });
 
-// Delete any post (admin)
 app.delete('/api/admin/posts/:id', requireAdmin, (req, res) => {
   const id = parseInt(req.params.id);
+  const before = posts.length;
   posts = posts.filter(p => p.id !== id);
+  // also remove related reports
   reports = reports.filter(r => r.postId !== id);
-  res.json({ success: true });
+
+  if (posts.length === before) return res.status(404).json({ error: "Post not found" });
+  return res.json({ success: true });
 });
 
-// Reports view (admin)
+// -------------------- ADMIN REPORTS --------------------
 app.get('/api/admin/reports', requireAdmin, (req, res) => {
-  const out = reports
-    .slice()
-    .reverse()
-    .map(r => {
-      const post = posts.find(p => p.id === r.postId);
-      return {
-        id: r.id,
-        postId: r.postId,
-        reason: r.reason,
-        message: r.message,
-        reporterIp: r.reporterIp,
-        timestamp: r.timestamp,
-        post: post ? {
-          id: post.id,
-          title: post.title,
-          text: post.text,
-          image: post.image,
-          date: post.date,
-          ownerIp: post.ownerIp
-        } : null
-      };
-    });
-
+  const out = reports.slice().reverse().map(r => {
+    const p = posts.find(x => x.id === r.postId);
+    return {
+      id: r.id,
+      postId: r.postId,
+      reason: r.reason,
+      message: r.message,
+      reporterIp: r.reporterIp,
+      timestamp: r.timestamp,
+      post: p ? {
+        id: p.id,
+        title: p.title,
+        text: p.text,
+        ownerIp: p.ownerIp
+      } : null
+    };
+  });
   res.json(out);
 });
 
-// Ignore report
 app.post('/api/admin/reports/:id/ignore', requireAdmin, (req, res) => {
   const id = parseInt(req.params.id);
+  const before = reports.length;
   reports = reports.filter(r => r.id !== id);
-  res.json({ success: true });
+  if (before === reports.length) return res.status(404).json({ error: "Report not found" });
+  return res.json({ success: true });
 });
 
-// Ban / unban
+// -------------------- ADMIN BANS --------------------
 app.get('/api/admin/bans', requireAdmin, (req, res) => {
-  res.json({ banned: Array.from(bannedIps) });
+  res.json({ banned: Array.from(bannedIps.values()) });
 });
 
 app.post('/api/admin/ban', requireAdmin, (req, res) => {
-  const ip = (req.body?.ip || "").toString().trim();
-  if (!ip) return res.status(400).json({ error: "IP required" });
+  const ip = (req.body && req.body.ip ? String(req.body.ip) : "").trim();
+  if (!ip) return res.status(400).json({ error: "Missing IP" });
   bannedIps.add(ip);
-  res.json({ success: true, banned: Array.from(bannedIps) });
+  return res.json({ success: true });
 });
 
 app.post('/api/admin/unban', requireAdmin, (req, res) => {
-  const ip = (req.body?.ip || "").toString().trim();
-  if (!ip) return res.status(400).json({ error: "IP required" });
+  const ip = (req.body && req.body.ip ? String(req.body.ip) : "").trim();
+  if (!ip) return res.status(400).json({ error: "Missing IP" });
   bannedIps.delete(ip);
-  res.json({ success: true, banned: Array.from(bannedIps) });
+  return res.json({ success: true });
 });
 
-// Maintenance mode toggle
+// -------------------- ADMIN MAINTENANCE --------------------
 app.post('/api/admin/maintenance', requireAdmin, (req, res) => {
-  const enabled = !!req.body?.enabled;
+  const enabled = !!(req.body && req.body.enabled);
   maintenanceMode = enabled;
-  res.json({ success: true, maintenance: maintenanceMode });
+  return res.json({ success: true, maintenance: maintenanceMode });
 });
 
-// ----- Multer/global errors -----
-app.use((err, req, res, next) => {
-  if (err) return res.status(400).json({ error: err.message || "Error" });
-  next();
+// -------------------- ✅ ADMIN SAFETY DETAILS (NEW) --------------------
+// Optional IP geolocation: set IPINFO_TOKEN in env (GitHub Actions secret) to enable.
+async function ipInfoLookup(ip) {
+  const token = process.env.IPINFO_TOKEN;
+  if (!token) return null;
+
+  try {
+    // Node 18 has global fetch
+    const resp = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}?token=${encodeURIComponent(token)}`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+
+    // data: { city, region, country, org, timezone, loc, ... }
+    return {
+      city: data.city || null,
+      region: data.region || null,
+      country: data.country || null,
+      ispOrg: data.org || null,
+      timezone: data.timezone || null
+    };
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/admin/posts/:id/details', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const post = posts.find(p => p.id === id);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  const ua = post.ownerUa || "";
+  const parsed = new UAParser(ua).getResult();
+
+  const ip = post.ownerIp || "unknown";
+  const geo = await ipInfoLookup(ip);
+
+  // Admin-only details response (never exposed to normal users)
+  return res.json({
+    postId: post.id,
+    createdAt: post.ownerCreatedAt ? new Date(post.ownerCreatedAt).toISOString() : null,
+
+    ip,
+    device: {
+      type: parsed.device && parsed.device.type ? parsed.device.type : "desktop/unknown",
+      vendor: parsed.device && parsed.device.vendor ? parsed.device.vendor : null,
+      model: parsed.device && parsed.device.model ? parsed.device.model : null
+    },
+    browser: {
+      name: parsed.browser && parsed.browser.name ? parsed.browser.name : null,
+      version: parsed.browser && parsed.browser.version ? parsed.browser.version : null
+    },
+    os: {
+      name: parsed.os && parsed.os.name ? parsed.os.name : null,
+      version: parsed.os && parsed.os.version ? parsed.os.version : null
+    },
+
+    network: {
+      // best-effort hints; may be empty depending on tunnel/proxy
+      acceptLanguage: post.ownerHeaders.acceptLanguage || null,
+      cfRay: post.ownerHeaders.cfRay || null,
+      cfIpCountry: post.ownerHeaders.cfIpcountry || null,
+      referer: post.ownerHeaders.referer || null
+    },
+
+    geo: geo ? geo : {
+      city: null,
+      region: null,
+      country: null,
+      ispOrg: null,
+      timezone: null
+    },
+
+    notes: {
+      privacy: "City/ISP require a geo provider. Set IPINFO_TOKEN to enable lookup."
+    }
+  });
 });
 
 app.listen(port, () => console.log(`Server running on ${port}`));
