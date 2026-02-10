@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DeadChats Files</title>
+  <title>Bitchless Files</title>
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -230,7 +230,7 @@
         <div class="leading-tight min-w-0">
           <div class="flex items-center gap-2 min-w-0">
             <h1 class="font-extrabold tracking-tight text-[15px] sm:text-base truncate">
-              DeadChats<span class="text-emerald-400">Files</span>
+              Bitchless<span class="text-emerald-400">Files</span>
             </h1>
             <span id="adminBadge" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-soft shrink-0">
               ADMIN
@@ -312,7 +312,7 @@
       </div>
 
       <div class="mt-auto pt-5 text-xs text-zinc-600">
-        DeadChats Files V3
+        Bitchless Files V3
       </div>
     </div>
   </div>
@@ -601,29 +601,30 @@
 
     <div class="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
       <div class="viewer-toolbar rounded-2xl px-3 py-2 flex items-center gap-2">
-        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="prevMedia(event)">
+        <!-- ✅ FIX: don't pass `event` (not available in some browsers) -->
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="prevMedia()">
           <i data-lucide="chevron-left" class="w-5 h-5"></i>
         </button>
         <div class="text-xs text-zinc-300 viewer-counter px-2">
           <span id="viewerCounter">1 / 1</span>
         </div>
-        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="nextMedia(event)">
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="nextMedia()">
           <i data-lucide="chevron-right" class="w-5 h-5"></i>
         </button>
       </div>
 
       <div class="viewer-toolbar rounded-2xl px-3 py-2 flex items-center gap-2">
-        <button id="zoomOutBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomOut(event)">
+        <button id="zoomOutBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomOut()">
           <i data-lucide="zoom-out" class="w-5 h-5"></i>
         </button>
-        <button id="zoomResetBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomReset(event)">
+        <button id="zoomResetBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomReset()">
           <i data-lucide="maximize-2" class="w-5 h-5"></i>
         </button>
-        <button id="zoomInBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomIn(event)">
+        <button id="zoomInBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomIn()">
           <i data-lucide="zoom-in" class="w-5 h-5"></i>
         </button>
 
-        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="closeMediaViewer(event)">
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="closeMediaViewer()">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -884,10 +885,9 @@
     }
 
     // ✅ updated preview renderer:
-    // - show 3 thumbs + "+X more"
-    // - no filenames for image/video/audio
-    // - x remove on each thumb
-    // - expanded list uses your existing previewList container
+    // - show 3 thumbs + "+X more" (always when files > 3)
+    // - clicking "+X more" expands list
+    // - list has remove buttons
     function renderFilePreview() {
       const wrap = document.getElementById("previewWrap");
       const row = document.getElementById("previewRow");
@@ -907,14 +907,13 @@
       wrap.classList.remove("hidden");
 
       const maxThumbs = 3;
-      const extra = selectedFiles.length > maxThumbs ? (selectedFiles.length - maxThumbs) : 0;
+      const extra = Math.max(0, selectedFiles.length - maxThumbs);
 
-      // Compact row always shows first 3 files (or fewer)
       const compactFiles = selectedFiles.slice(0, maxThumbs);
 
       row.innerHTML = compactFiles.map((f, idx) => {
         const kind = kindFromFile(f);
-        const actualIndex = idx; // because slice starts from 0
+        const actualIndex = idx;
         let inner = "";
 
         if (kind === "image") {
@@ -938,26 +937,31 @@
         `;
       }).join("");
 
+      /* ✅ FIX: always show +X more when there are more than 3 files */
       if (extra > 0) {
         row.innerHTML += `
           <div class="more-pill" onclick="toggleExpandedPreviews()">
-            <i data-lucide="layers" class="w-4 h-4 text-zinc-200"></i>
+            <i data-lucide="${previewsExpanded ? "chevrons-up" : "layers"}" class="w-4 h-4 text-zinc-200"></i>
             +${extra} more
           </div>
         `;
       } else {
-        // If no extra files, still allow expand/collapse when user wants to manage (optional)
-        // Keep it simple: no pill.
+        /* Keep a small manage pill when <= 3 so user can still open list if desired */
+        row.innerHTML += `
+          <div class="more-pill" onclick="toggleExpandedPreviews()">
+            <i data-lucide="${previewsExpanded ? "chevrons-up" : "sliders-horizontal"}" class="w-4 h-4 text-zinc-200"></i>
+            ${previewsExpanded ? "Hide list" : "Manage"}
+          </div>
+        `;
       }
 
       // Expanded manager list (uses existing previewList)
-      if (previewsExpanded && selectedFiles.length > maxThumbs) {
+      if (previewsExpanded) {
         list.classList.remove("hidden");
         list.innerHTML = selectedFiles.map((f, idx) => {
           const kind = kindFromFile(f);
           const size = formatBytes(f.size);
 
-          // ✅ Hide filenames for media (image/video/audio); show type label
           const showName = (kind === "file");
           const name = escapeHtml(f.name);
 
@@ -994,14 +998,7 @@
               </button>
             </div>
           `;
-        }).join("") + `
-          <div class="flex justify-end">
-            <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="toggleExpandedPreviews()">
-              <i data-lucide="chevron-up" class="w-4 h-4"></i>
-              Collapse
-            </button>
-          </div>
-        `;
+        }).join("");
       } else {
         list.classList.add("hidden");
         list.innerHTML = "";
@@ -1012,7 +1009,7 @@
 
     function removeSelectedFile(index) {
       selectedFiles.splice(index, 1);
-      if (selectedFiles.length <= 3) previewsExpanded = false;
+      if (!selectedFiles.length) previewsExpanded = false;
       renderFilePreview();
     }
 
@@ -1393,7 +1390,8 @@
     }
 
     function closeMediaViewer(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       toggleModal("mediaViewer", false);
       clearViewerPointers();
       lockScroll(false);
@@ -1491,7 +1489,8 @@
     }
 
     function prevMedia(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       if (!viewerItems.length) return;
       viewerIndex = (viewerIndex - 1 + viewerItems.length) % viewerItems.length;
       resetViewerTransform(true);
@@ -1500,7 +1499,8 @@
     }
 
     function nextMedia(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       if (!viewerItems.length) return;
       viewerIndex = (viewerIndex + 1) % viewerItems.length;
       resetViewerTransform(true);
@@ -1509,14 +1509,16 @@
     }
 
     function zoomIn(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       if (!viewerIsImage) return;
       viewerScale = Math.min(6, viewerScale + 0.35);
       applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
     }
 
     function zoomOut(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       if (!viewerIsImage) return;
       viewerScale = Math.max(1, viewerScale - 0.35);
       if (viewerScale === 1) { viewerTx = 0; viewerTy = 0; }
@@ -1524,7 +1526,8 @@
     }
 
     function zoomReset(e) {
-      if (e) e.stopPropagation();
+      const ev = e || window.event;
+      if (ev && ev.stopPropagation) ev.stopPropagation();
       resetViewerTransform(false);
       applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
     }
