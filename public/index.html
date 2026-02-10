@@ -84,6 +84,76 @@
       .preview-scroll { max-height: 45vh; }
     }
 
+    /* ✅ Sticky footer row inside scrollable modal (Post button always visible) */
+    .sticky-footer {
+      position: sticky;
+      bottom: 0;
+      background: rgba(10, 10, 14, 0.92);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: .6rem;
+      padding-bottom: .6rem;
+      margin-bottom: -0.25rem;
+    }
+
+    /* ✅ WhatsApp-style compact selected-media preview */
+    .preview-row {
+      display: flex;
+      gap: .55rem;
+      flex-wrap: wrap;
+      align-items: center;
+      overflow: hidden;
+    }
+    .thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.25);
+      position: relative;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .thumb img, .thumb video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb .thumb-icon {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      background: rgba(255,255,255,0.04);
+    }
+    .thumb .remove-x {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 26px;
+      height: 26px;
+      border-radius: 9999px;
+      display: grid;
+      place-items: center;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+    }
+    .more-pill {
+      height: 64px;
+      padding: 0 .85rem;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.05);
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+
     /* Lightbox (media viewer) */
     .viewer-toolbar {
       background: rgba(10, 10, 14, 0.55);
@@ -337,6 +407,12 @@
               <div id="fileCount" class="text-xs text-zinc-500"></div>
             </div>
 
+            <!-- ✅ NEW: WhatsApp-style compact preview row (first 3 + “+X more”) -->
+            <div id="previewWrap" class="hidden mt-3">
+              <div id="previewRow" class="preview-row"></div>
+            </div>
+
+            <!-- Existing list kept (now used as expanded manager view) -->
             <div id="previewList" class="hidden mt-3 space-y-2 preview-scroll"></div>
           </div>
 
@@ -348,7 +424,8 @@
           </div>
 
           <!-- ✅ FIX: on mobile button is FULL WIDTH (no horizontal scroll needed) -->
-          <div class="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+          <!-- ✅ ALSO: sticky footer so button stays visible even if you scroll inside modal -->
+          <div class="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1 sticky-footer">
             <div class="text-xs text-zinc-500">Profanity filter enabled</div>
             <button type="submit" class="btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 w-full sm:w-auto">
               <i data-lucide="send" class="w-4 h-4"></i>
@@ -580,6 +657,9 @@
     const postFilesInput = document.getElementById("postFiles");
     let selectedFiles = [];
 
+    // ✅ upload preview UI state (compact row + expand)
+    let previewsExpanded = false;
+
     // viewer state (current post attachments)
     let viewerItems = [];
     let viewerIndex = 0;
@@ -778,12 +858,14 @@
     // ---------- Upload: multi-file preview ----------
     postFilesInput.addEventListener("change", () => {
       selectedFiles = Array.from(postFilesInput.files || []);
+      previewsExpanded = false;
       renderFilePreview();
     });
 
     function clearFiles() {
       postFilesInput.value = "";
       selectedFiles = [];
+      previewsExpanded = false;
       renderFilePreview();
     }
 
@@ -795,31 +877,116 @@
       return "file";
     }
 
+    // ✅ toggles expanded manager list
+    function toggleExpandedPreviews() {
+      previewsExpanded = !previewsExpanded;
+      renderFilePreview();
+    }
+
+    // ✅ updated preview renderer:
+    // - show 3 thumbs + "+X more"
+    // - no filenames for image/video/audio
+    // - x remove on each thumb
+    // - expanded list uses your existing previewList container
     function renderFilePreview() {
+      const wrap = document.getElementById("previewWrap");
+      const row = document.getElementById("previewRow");
       const list = document.getElementById("previewList");
       const count = document.getElementById("fileCount");
 
       count.textContent = selectedFiles.length ? `${selectedFiles.length} file(s) selected` : "";
 
       if (!selectedFiles.length) {
+        wrap.classList.add("hidden");
+        row.innerHTML = "";
         list.classList.add("hidden");
         list.innerHTML = "";
         return;
       }
 
-      list.classList.remove("hidden");
-      list.innerHTML = selectedFiles.map((f, idx) => {
+      wrap.classList.remove("hidden");
+
+      const maxThumbs = 3;
+      const extra = selectedFiles.length > maxThumbs ? (selectedFiles.length - maxThumbs) : 0;
+
+      // Compact row always shows first 3 files (or fewer)
+      const compactFiles = selectedFiles.slice(0, maxThumbs);
+
+      row.innerHTML = compactFiles.map((f, idx) => {
         const kind = kindFromFile(f);
-        const name = escapeHtml(f.name);
-        const size = formatBytes(f.size);
+        const actualIndex = idx; // because slice starts from 0
+        let inner = "";
 
         if (kind === "image") {
           const url = URL.createObjectURL(f);
+          inner = `<img src="${url}" alt="">`;
+        } else if (kind === "video") {
+          inner = `<div class="thumb-icon"><i data-lucide="video" class="w-6 h-6 text-zinc-200"></i></div>`;
+        } else if (kind === "audio") {
+          inner = `<div class="thumb-icon"><i data-lucide="music" class="w-6 h-6 text-zinc-200"></i></div>`;
+        } else {
+          inner = `<div class="thumb-icon"><i data-lucide="file" class="w-6 h-6 text-zinc-200"></i></div>`;
+        }
+
+        return `
+          <div class="thumb">
+            ${inner}
+            <button type="button" class="remove-x" onclick="removeSelectedFile(${actualIndex})" aria-label="Remove">
+              <i data-lucide="x" class="w-4 h-4 text-zinc-100"></i>
+            </button>
+          </div>
+        `;
+      }).join("");
+
+      if (extra > 0) {
+        row.innerHTML += `
+          <div class="more-pill" onclick="toggleExpandedPreviews()">
+            <i data-lucide="layers" class="w-4 h-4 text-zinc-200"></i>
+            +${extra} more
+          </div>
+        `;
+      } else {
+        // If no extra files, still allow expand/collapse when user wants to manage (optional)
+        // Keep it simple: no pill.
+      }
+
+      // Expanded manager list (uses existing previewList)
+      if (previewsExpanded && selectedFiles.length > maxThumbs) {
+        list.classList.remove("hidden");
+        list.innerHTML = selectedFiles.map((f, idx) => {
+          const kind = kindFromFile(f);
+          const size = formatBytes(f.size);
+
+          // ✅ Hide filenames for media (image/video/audio); show type label
+          const showName = (kind === "file");
+          const name = escapeHtml(f.name);
+
+          if (kind === "image") {
+            const url = URL.createObjectURL(f);
+            return `
+              <div class="panel rounded-2xl p-3 flex items-center gap-3">
+                <img src="${url}" class="w-12 h-12 rounded-xl object-cover border border-white/10 bg-black/30" />
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-zinc-200">IMAGE</div>
+                  <div class="text-xs text-zinc-500">${size}</div>
+                </div>
+                <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="removeSelectedFile(${idx})">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+            `;
+          }
+
+          const icon = kind === "video" ? "video" : (kind === "audio" ? "music" : "file");
+          const label = kind === "video" ? "VIDEO" : (kind === "audio" ? "AUDIO" : "FILE");
+
           return `
             <div class="panel rounded-2xl p-3 flex items-center gap-3">
-              <img src="${url}" class="w-12 h-12 rounded-xl object-cover border border-white/10 bg-black/30" />
+              <div class="w-12 h-12 rounded-xl bg-white/5 ring-soft flex items-center justify-center">
+                <i data-lucide="${icon}" class="w-5 h-5 text-zinc-200"></i>
+              </div>
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold truncate">${name}</div>
+                ${showName ? `<div class="text-sm font-semibold truncate">${name}</div>` : `<div class="text-sm font-semibold text-zinc-200">${label}</div>`}
                 <div class="text-xs text-zinc-500">${size}</div>
               </div>
               <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="removeSelectedFile(${idx})">
@@ -827,30 +994,25 @@
               </button>
             </div>
           `;
-        }
-
-        const icon = kind === "video" ? "video" : (kind === "audio" ? "music" : "file");
-        return `
-          <div class="panel rounded-2xl p-3 flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl bg-white/5 ring-soft flex items-center justify-center">
-              <i data-lucide="${icon}" class="w-5 h-5 text-zinc-200"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="text-sm font-semibold truncate">${name}</div>
-              <div class="text-xs text-zinc-500">${size}</div>
-            </div>
-            <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="removeSelectedFile(${idx})">
-              <i data-lucide="x" class="w-4 h-4"></i>
+        }).join("") + `
+          <div class="flex justify-end">
+            <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="toggleExpandedPreviews()">
+              <i data-lucide="chevron-up" class="w-4 h-4"></i>
+              Collapse
             </button>
           </div>
         `;
-      }).join("");
+      } else {
+        list.classList.add("hidden");
+        list.innerHTML = "";
+      }
 
       lucide.createIcons();
     }
 
     function removeSelectedFile(index) {
       selectedFiles.splice(index, 1);
+      if (selectedFiles.length <= 3) previewsExpanded = false;
       renderFilePreview();
     }
 
@@ -2028,6 +2190,8 @@
       await verifyAdminToken();
       await checkMaintenance();
       await loadPosts();
+      // ensure preview UI is clean on load
+      renderFilePreview();
     })();
   </script>
 </body>
