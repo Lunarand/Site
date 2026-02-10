@@ -45,11 +45,12 @@
     }
     .ring-soft { box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset; }
     .btn {
-      display:inline-flex; align-items:center; gap:.5rem;
+      display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
       border-radius: 9999px;
       padding: .65rem 1rem;
       font-weight: 700;
       transition: transform .08s ease, background .2s ease, box-shadow .2s ease;
+      white-space: nowrap;
     }
     .btn:active { transform: translateY(1px); }
     .toast { animation: toastIn .2s ease-out; }
@@ -57,6 +58,13 @@
       from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    /* Better mobile: prevent buttons from pushing layout */
+    .action-row { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .action-row .btn { padding:.55rem .9rem; }
+    .media-grid { display:grid; gap:.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @media (min-width: 640px) { .media-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .media-card { border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.25); border-radius: 16px; overflow:hidden; }
+    .file-pill { border: 1px solid rgba(255,255,255,0.10); border-radius: 9999px; padding: .4rem .7rem; display:flex; gap:.4rem; align-items:center; }
   </style>
 </head>
 
@@ -73,7 +81,7 @@
       <p class="mt-2 text-sm text-zinc-500">
         Posting, commenting, likes, and reporting are disabled for normal users.
       </p>
-      <button onclick="openAdminBypass()" class="mt-6 btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 justify-center w-full">
+      <button onclick="openAdminBypass()" class="mt-6 btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 w-full">
         <i data-lucide="shield-check" class="w-5 h-5"></i>
         No, I'm admin
       </button>
@@ -83,24 +91,24 @@
   <!-- Top Nav -->
   <nav class="glass fixed top-0 w-full z-40">
     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-2xl bg-emerald-500/15 ring-soft flex items-center justify-center">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-2xl bg-emerald-500/15 ring-soft flex items-center justify-center shrink-0">
           <i data-lucide="ghost" class="w-5 h-5 text-emerald-400"></i>
         </div>
-        <div class="leading-tight">
-          <div class="flex items-center gap-2">
-            <h1 class="font-extrabold tracking-tight text-[15px] sm:text-base">
+        <div class="leading-tight min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <h1 class="font-extrabold tracking-tight text-[15px] sm:text-base truncate">
               DeadChats<span class="text-emerald-400">Files</span>
             </h1>
-            <span id="adminBadge" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-soft">
+            <span id="adminBadge" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-soft shrink-0">
               ADMIN
             </span>
           </div>
-          <p class="text-[12px] text-zinc-500">Anonymous board • images + text</p>
+          <p class="text-[12px] text-zinc-500 truncate">Anonymous board • files + media</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <button id="newPostBtn" onclick="toggleModal('uploadModal', true)" class="btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
           <i data-lucide="plus" class="w-5 h-5"></i>
           <span class="hidden sm:inline">New Post</span>
@@ -148,7 +156,6 @@
           </div>
         </button>
 
-        <!-- Admin Panel entry (admin only) -->
         <button id="adminPanelBtn" onclick="openAdminPanel()" class="hidden w-full text-left p-3 rounded-2xl hover:bg-white/5 text-zinc-200 ring-soft flex items-center gap-3">
           <i data-lucide="layout-dashboard" class="w-5 h-5 text-emerald-300"></i>
           <div>
@@ -185,16 +192,16 @@
       <!-- Search -->
       <div class="panel rounded-3xl p-4">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-2xl bg-white/5 ring-soft flex items-center justify-center">
+          <div class="w-10 h-10 rounded-2xl bg-white/5 ring-soft flex items-center justify-center shrink-0">
             <i data-lucide="search" class="w-5 h-5 text-zinc-300"></i>
           </div>
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <div class="text-xs text-zinc-500 font-semibold">Search</div>
             <input type="text" id="searchInput" placeholder="Search titles or content..."
               class="w-full mt-1 bg-transparent outline-none text-sm text-zinc-100 placeholder:text-zinc-600"
             />
           </div>
-          <button onclick="loadPosts()" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200">
+          <button onclick="loadPosts()" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 shrink-0">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             <span class="hidden sm:inline">Refresh</span>
           </button>
@@ -226,7 +233,7 @@
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-xl font-extrabold">Create Post</h2>
-          <p class="text-sm text-zinc-500 mt-1">Anonymous. Images allowed. Keep it clean.</p>
+          <p class="text-sm text-zinc-500 mt-1">Anonymous. Upload multiple files (images/video/audio/files).</p>
         </div>
         <button onclick="toggleModal('uploadModal', false)" class="p-2 hover:bg-white/5 rounded-xl ring-soft">
           <i data-lucide="x" class="w-5 h-5 text-zinc-300"></i>
@@ -250,19 +257,25 @@
           </div>
 
           <div class="sm:col-span-2">
-            <label class="text-xs font-semibold text-zinc-400">Image (optional)</label>
-            <label class="mt-1 inline-flex items-center gap-2 btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 cursor-pointer">
-              <input type="file" id="postImage" class="hidden" accept="image/*">
-              <i data-lucide="image" class="w-4 h-4"></i>
-              Choose image
-            </label>
-            <div id="previewWrap" class="hidden mt-3">
-              <div class="flex items-center justify-between">
-                <div class="text-xs text-zinc-400 font-semibold">Preview</div>
-                <button type="button" onclick="clearImage()" class="text-xs text-zinc-400 hover:text-zinc-200 underline">Remove</button>
-              </div>
-              <img id="imagePreview" class="mt-2 w-full max-h-[340px] object-contain rounded-2xl bg-black/30 border border-white/10" />
+            <label class="text-xs font-semibold text-zinc-400">Attachments (optional)</label>
+            <div class="flex flex-wrap gap-2 items-center">
+              <label class="inline-flex items-center gap-2 btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 cursor-pointer">
+                <input type="file" id="postFiles" class="hidden" multiple
+                  accept="image/*,video/*,audio/*,.pdf,.zip,.rar,.7z,.txt,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.apk"
+                >
+                <i data-lucide="paperclip" class="w-4 h-4"></i>
+                Add files
+              </label>
+
+              <button type="button" onclick="clearFiles()" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                Clear
+              </button>
+
+              <div id="fileCount" class="text-xs text-zinc-500"></div>
             </div>
+
+            <div id="previewList" class="hidden mt-3 space-y-2"></div>
           </div>
 
           <div class="sm:col-span-2 hidden" id="progressContainer">
@@ -284,7 +297,7 @@
     </div>
   </div>
 
-  <!-- Login Modal (already fixed earlier) -->
+  <!-- Login Modal -->
   <div id="loginModal" class="fixed inset-0 z-[95] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="closeLoginModal()"></div>
 
@@ -303,7 +316,7 @@
         <input type="password" id="adminPass" placeholder="Enter Secret Password"
           class="w-full bg-black/30 p-3 rounded-2xl border border-white/10 focus:outline-none focus:border-emerald-500/70 text-white"
         >
-        <button onclick="loginAdmin()" class="w-full btn justify-center bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+        <button onclick="loginAdmin()" class="w-full btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
           <i data-lucide="shield-check" class="w-4 h-4"></i>
           Login
         </button>
@@ -316,11 +329,11 @@
     <div class="absolute inset-0 modal-bg" onclick="closePostModal()"></div>
     <div class="relative w-full max-w-3xl panel rounded-[28px] p-4 sm:p-6 shadow-2xl fade-up">
       <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 id="postModalTitle" class="text-xl font-extrabold">Post</h2>
-          <p id="postModalMeta" class="text-sm text-zinc-500 mt-1">Anonymous</p>
+        <div class="min-w-0">
+          <h2 id="postModalTitle" class="text-xl font-extrabold truncate">Post</h2>
+          <p id="postModalMeta" class="text-sm text-zinc-500 mt-1 truncate">Anonymous</p>
         </div>
-        <button onclick="closePostModal()" class="p-2 hover:bg-white/5 rounded-xl ring-soft">
+        <button onclick="closePostModal()" class="p-2 hover:bg-white/5 rounded-xl ring-soft shrink-0">
           <i data-lucide="x" class="w-5 h-5 text-zinc-300"></i>
         </button>
       </div>
@@ -331,42 +344,15 @@
         <div class="text-sm font-extrabold">Comments</div>
         <div id="commentsList" class="mt-3 space-y-3"></div>
 
-        <div class="mt-4 flex gap-2">
+        <div class="mt-4 flex flex-col sm:flex-row gap-2">
           <input id="commentInput" type="text" placeholder="Write an anonymous comment..."
             class="flex-1 bg-black/30 p-3 rounded-2xl border border-white/10 focus:outline-none focus:border-emerald-500/70"
           >
-          <button onclick="addComment()" class="btn bg-emerald-600 hover:bg-emerald-500 text-white">
+          <button onclick="addComment()" class="btn bg-emerald-600 hover:bg-emerald-500 text-white sm:w-auto w-full">
             <i data-lucide="message-circle" class="w-4 h-4"></i>
             Send
           </button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ✅ NEW: Safety Details Modal (ADMIN ONLY) -->
-  <div id="safetyModal" class="fixed inset-0 z-[75] hidden flex items-center justify-center p-4">
-    <div class="absolute inset-0 modal-bg" onclick="closeSafetyDetails()"></div>
-    <div class="relative w-full max-w-2xl panel rounded-[28px] p-6 shadow-2xl fade-up">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-xl font-extrabold">Safety Details</h2>
-          <p class="text-sm text-zinc-500 mt-1">Admin-only. Never visible to normal users.</p>
-        </div>
-        <button onclick="closeSafetyDetails()" class="p-2 hover:bg-white/5 rounded-xl ring-soft">
-          <i data-lucide="x" class="w-5 h-5 text-zinc-300"></i>
-        </button>
-      </div>
-
-      <div id="safetyBody" class="mt-5"></div>
-
-      <div class="mt-5 flex flex-wrap gap-2 justify-end">
-        <button id="safetyDeleteBtn" class="btn bg-red-500/12 hover:bg-red-500/18 text-red-200 ring-soft">
-          <i data-lucide="trash-2" class="w-4 h-4"></i> Delete post
-        </button>
-        <button id="safetyBanBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200">
-          <i data-lucide="ban" class="w-4 h-4"></i> Ban IP
-        </button>
       </div>
     </div>
   </div>
@@ -401,7 +387,7 @@
         <textarea id="reportMessage" class="hidden w-full bg-black/30 p-3 rounded-2xl border border-white/10 focus:outline-none focus:border-emerald-500/70 h-24 resize-none"
           placeholder="Explain (required for Something else)"></textarea>
 
-        <button onclick="submitReport()" class="w-full btn justify-center bg-amber-600 hover:bg-amber-500 text-white">
+        <button onclick="submitReport()" class="w-full btn bg-amber-600 hover:bg-amber-500 text-white">
           <i data-lucide="flag" class="w-4 h-4"></i>
           Submit report
         </button>
@@ -409,7 +395,7 @@
     </div>
   </div>
 
-  <!-- Admin Panel Modal -->
+  <!-- Admin Panel Modal (unchanged layout, still works) -->
   <div id="adminModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="closeAdminPanel()"></div>
     <div class="relative w-full max-w-6xl panel rounded-[28px] p-4 sm:p-6 shadow-2xl fade-up overflow-hidden">
@@ -442,6 +428,33 @@
     </div>
   </div>
 
+  <!-- ✅ Safety Details Modal (for post OR comment) -->
+  <div id="safetyModal" class="fixed inset-0 z-[75] hidden flex items-center justify-center p-4">
+    <div class="absolute inset-0 modal-bg" onclick="closeSafetyDetails()"></div>
+    <div class="relative w-full max-w-2xl panel rounded-[28px] p-6 shadow-2xl fade-up">
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h2 id="safetyTitle" class="text-xl font-extrabold truncate">Safety Details</h2>
+          <p class="text-sm text-zinc-500 mt-1">Admin-only</p>
+        </div>
+        <button onclick="closeSafetyDetails()" class="p-2 hover:bg-white/5 rounded-xl ring-soft shrink-0">
+          <i data-lucide="x" class="w-5 h-5 text-zinc-300"></i>
+        </button>
+      </div>
+
+      <div id="safetyBody" class="mt-5"></div>
+
+      <div class="mt-5 flex flex-wrap gap-2 justify-end">
+        <button id="safetyDeleteBtn" class="btn bg-red-500/12 hover:bg-red-500/18 text-red-200 ring-soft">
+          <i data-lucide="trash-2" class="w-4 h-4"></i> Delete post
+        </button>
+        <button id="safetyBanBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200">
+          <i data-lucide="ban" class="w-4 h-4"></i> Ban IP
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toasts -->
   <div id="toasts" class="fixed bottom-4 right-4 z-[90] space-y-2"></div>
 
@@ -453,9 +466,17 @@
     let isAdmin = false;
     let adminToken = localStorage.getItem("adminToken") || null;
 
-    let selectedPostId = null;   // for post modal
-    let reportPostId = null;     // for report modal
+    let selectedPostId = null;
+    let reportPostId = null;
     let lastMaintenance = false;
+
+    // safety modal state
+    let safetyTargetPostId = null;
+    let safetyTargetIp = null;
+
+    // upload state
+    const postFilesInput = document.getElementById("postFiles");
+    let selectedFiles = [];
 
     // ---------- Helpers ----------
     function escapeHtml(str) {
@@ -465,6 +486,15 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function formatBytes(bytes) {
+      const b = Number(bytes || 0);
+      if (!b) return "0 B";
+      const units = ["B","KB","MB","GB"];
+      let i = 0, v = b;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
     function toast(message, type="ok") {
@@ -534,7 +564,18 @@
       return h;
     }
 
-    // ---------- Maintenance mode ----------
+    function skeleton() {
+      return `
+        <div class="panel rounded-3xl p-5 animate-pulse">
+          <div class="h-4 w-40 bg-white/10 rounded"></div>
+          <div class="mt-3 h-3 w-full bg-white/10 rounded"></div>
+          <div class="mt-2 h-3 w-5/6 bg-white/10 rounded"></div>
+          <div class="mt-4 h-56 w-full bg-white/10 rounded-2xl"></div>
+        </div>
+      `;
+    }
+
+    // ---------- Maintenance ----------
     async function checkMaintenance() {
       try {
         const res = await fetch("/api/status");
@@ -563,37 +604,28 @@
 
     // ---------- Admin auth verification ----------
     async function verifyAdminToken() {
-      if (!adminToken) {
-        setAdminUI(false);
-        return;
-      }
+      if (!adminToken) { setAdminUI(false); return; }
       try {
         const res = await fetch("/api/admin/status", { headers: authHeaders() });
-        if (res.ok) {
-          setAdminUI(true);
-        } else {
+        if (res.ok) setAdminUI(true);
+        else {
           adminToken = null;
           localStorage.removeItem("adminToken");
           setAdminUI(false);
         }
-      } catch (e) {
-        setAdminUI(false);
-      }
+      } catch (e) { setAdminUI(false); }
     }
 
     // ---------- Login / logout ----------
     async function loginAdmin() {
       const pass = document.getElementById('adminPass').value;
-
       try {
         const res = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: pass })
         });
-
         const data = await res.json().catch(() => ({}));
-
         if (data.success && data.token) {
           adminToken = data.token;
           localStorage.setItem("adminToken", adminToken);
@@ -621,30 +653,89 @@
       loadPosts();
     }
 
-    // ---------- Upload preview ----------
-    const fileInput = document.getElementById("postImage");
-    const previewWrap = document.getElementById("previewWrap");
-    const imagePreview = document.getElementById("imagePreview");
-
-    function showPreview(file) {
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      imagePreview.src = url;
-      previewWrap.classList.remove("hidden");
-    }
-
-    function clearImage() {
-      fileInput.value = "";
-      imagePreview.src = "";
-      previewWrap.classList.add("hidden");
-    }
-
-    fileInput.addEventListener("change", () => {
-      const f = fileInput.files && fileInput.files[0];
-      if (f) showPreview(f);
+    // ---------- Upload: multi-file preview ----------
+    postFilesInput.addEventListener("change", () => {
+      selectedFiles = Array.from(postFilesInput.files || []);
+      renderFilePreview();
     });
 
-    // ---------- Upload ----------
+    function clearFiles() {
+      postFilesInput.value = "";
+      selectedFiles = [];
+      renderFilePreview();
+    }
+
+    function kindFromFile(file) {
+      const t = (file.type || "").toLowerCase();
+      if (t.startsWith("image/")) return "image";
+      if (t.startsWith("video/")) return "video";
+      if (t.startsWith("audio/")) return "audio";
+      return "file";
+    }
+
+    function renderFilePreview() {
+      const list = document.getElementById("previewList");
+      const count = document.getElementById("fileCount");
+
+      count.textContent = selectedFiles.length ? `${selectedFiles.length} file(s) selected` : "";
+
+      if (!selectedFiles.length) {
+        list.classList.add("hidden");
+        list.innerHTML = "";
+        return;
+      }
+
+      list.classList.remove("hidden");
+      list.innerHTML = selectedFiles.map((f, idx) => {
+        const kind = kindFromFile(f);
+        const name = escapeHtml(f.name);
+        const size = formatBytes(f.size);
+
+        if (kind === "image") {
+          const url = URL.createObjectURL(f);
+          return `
+            <div class="panel rounded-2xl p-3 flex items-center gap-3">
+              <img src="${url}" class="w-12 h-12 rounded-xl object-cover border border-white/10 bg-black/30" />
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold truncate">${name}</div>
+                <div class="text-xs text-zinc-500">${size}</div>
+              </div>
+              <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="removeSelectedFile(${idx})">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+          `;
+        }
+
+        const icon = kind === "video" ? "video" : (kind === "audio" ? "music" : "file");
+        return `
+          <div class="panel rounded-2xl p-3 flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-white/5 ring-soft flex items-center justify-center">
+              <i data-lucide="${icon}" class="w-5 h-5 text-zinc-200"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-semibold truncate">${name}</div>
+              <div class="text-xs text-zinc-500">${size}</div>
+            </div>
+            <button type="button" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="removeSelectedFile(${idx})">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+        `;
+      }).join("");
+
+      lucide.createIcons();
+    }
+
+    function removeSelectedFile(index) {
+      selectedFiles.splice(index, 1);
+
+      // rebuild FileList is not directly possible, so we just keep selectedFiles array
+      // and upload from that array.
+      renderFilePreview();
+    }
+
+    // ---------- Upload submit ----------
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -665,7 +756,9 @@
       const formData = new FormData();
       formData.append('title', document.getElementById('postTitle').value);
       formData.append('text', document.getElementById('postText').value);
-      if (fileInput.files[0]) formData.append('image', fileInput.files[0]);
+
+      // upload from selectedFiles array (supports "remove" even though FileList can't be edited)
+      for (const f of selectedFiles) formData.append('files', f);
 
       try {
         const res = await fetch('/api/upload', { method: 'POST', body: formData, headers: authHeaders() });
@@ -680,7 +773,7 @@
           setTimeout(() => {
             toggleModal('uploadModal', false);
             document.getElementById('uploadForm').reset();
-            clearImage();
+            clearFiles();
             barContainer.classList.add('hidden');
             bar.style.width = '0%';
             btn.disabled = false;
@@ -727,27 +820,14 @@
       }
     }
 
-    function skeleton() {
-      return `
-        <div class="panel rounded-3xl p-5 animate-pulse">
-          <div class="h-4 w-40 bg-white/10 rounded"></div>
-          <div class="mt-3 h-3 w-full bg-white/10 rounded"></div>
-          <div class="mt-2 h-3 w-5/6 bg-white/10 rounded"></div>
-          <div class="mt-4 h-56 w-full bg-white/10 rounded-2xl"></div>
-        </div>
-      `;
-    }
-
-    // ---------- Post interactions ----------
+    // ---------- Interactions ----------
     async function likePost(id) {
       try {
         const res = await fetch(`/api/posts/${id}/like`, { method: "POST", headers: authHeaders() });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return toast(data.error || "Like failed", "bad");
         updateCounts(id, data.likes, data.dislikes);
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     async function dislikePost(id) {
@@ -756,9 +836,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return toast(data.error || "Dislike failed", "bad");
         updateCounts(id, data.likes, data.dislikes);
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     function updateCounts(id, likes, dislikes) {
@@ -768,12 +846,80 @@
       const d = el.querySelector(`[data-dislikecount="${id}"]`);
       if (l) l.textContent = likes;
       if (d) d.textContent = dislikes;
-
       const p = allPosts.find(x => x.id === id);
       if (p) { p.likes = likes; p.dislikes = dislikes; }
     }
 
-    // ---------- Post modal (detail view + comments) ----------
+    // ---------- Media rendering ----------
+    function renderAttachments(attachments, mode="feed") {
+      const at = Array.isArray(attachments) ? attachments : [];
+      if (!at.length) return "";
+
+      const maxFeedItems = 3;
+      const shown = (mode === "feed") ? at.slice(0, maxFeedItems) : at;
+      const extra = (mode === "feed" && at.length > maxFeedItems) ? (at.length - maxFeedItems) : 0;
+
+      const items = shown.map(a => {
+        const url = a.url;
+        const name = escapeHtml(a.name || "file");
+        const kind = a.kind || "file";
+
+        if (kind === "image") {
+          return `
+            <div class="media-card">
+              <img src="${url}" class="w-full h-40 sm:h-44 object-cover" loading="lazy"/>
+            </div>
+          `;
+        }
+        if (kind === "video") {
+          return `
+            <div class="media-card p-2">
+              <video controls class="w-full rounded-xl bg-black/40">
+                <source src="${url}" type="${a.mimetype || 'video/mp4'}">
+              </video>
+              <div class="mt-2 text-xs text-zinc-500 truncate">${name}</div>
+            </div>
+          `;
+        }
+        if (kind === "audio") {
+          return `
+            <div class="media-card p-3">
+              <div class="text-sm font-semibold truncate mb-2">${name}</div>
+              <audio controls class="w-full">
+                <source src="${url}" type="${a.mimetype || 'audio/mpeg'}">
+              </audio>
+            </div>
+          `;
+        }
+
+        return `
+          <a class="media-card p-3 block hover:bg-white/5 transition" href="${url}" target="_blank" rel="noopener">
+            <div class="flex items-center gap-2">
+              <i data-lucide="file" class="w-4 h-4 text-zinc-300"></i>
+              <div class="min-w-0">
+                <div class="text-sm font-semibold truncate">${name}</div>
+                <div class="text-xs text-zinc-500">Download</div>
+              </div>
+            </div>
+          </a>
+        `;
+      }).join("");
+
+      const badge = extra ? `
+        <div class="file-pill text-xs text-zinc-200 bg-white/5 ring-soft">
+          <i data-lucide="layers" class="w-4 h-4"></i> +${extra} more
+        </div>
+      ` : "";
+
+      return `
+        <div class="mt-4">
+          <div class="media-grid">${items}</div>
+          ${badge ? `<div class="mt-3">${badge}</div>` : ``}
+        </div>
+      `;
+    }
+
+    // ---------- Post modal ----------
     async function openPostModal(id) {
       selectedPostId = id;
       toggleModal("postModal", true);
@@ -793,24 +939,22 @@
         document.getElementById("postModalTitle").textContent = post.title || "Untitled";
         document.getElementById("postModalMeta").textContent = `Anonymous • ${post.date || ""}`;
 
-        const imgHtml = post.image
-          ? `<img src="${post.image}" class="w-full max-h-[420px] object-contain rounded-2xl bg-black/30 border border-white/10" />`
-          : "";
-
-        // ✅ NEW: admin-only Safety button
         const adminSafetyBtn = (isAdmin && adminToken)
           ? `
-            <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="openSafetyDetails(${post.id})">
+            <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="openPostSafety(${post.id})">
               <i data-lucide="shield-alert" class="w-4 h-4"></i> Safety
             </button>
           `
           : "";
 
+        const mediaHtml = renderAttachments(post.attachments || [], "detail");
+
         document.getElementById("postModalBody").innerHTML = `
           <div class="space-y-3">
-            ${imgHtml}
+            ${mediaHtml}
             <div class="text-sm text-zinc-200 whitespace-pre-wrap">${escapeHtml(post.text || "")}</div>
-            <div class="flex flex-wrap gap-2 pt-2">
+
+            <div class="action-row pt-2">
               <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="likePost(${post.id})">
                 <i data-lucide="thumbs-up" class="w-4 h-4"></i> <span>${post.likes}</span>
               </button>
@@ -848,14 +992,29 @@
       }
 
       comments.forEach(c => {
+        const safeBtn = (isAdmin && adminToken)
+          ? `
+            <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="openCommentSafety(${selectedPostId}, ${c.id})">
+              <i data-lucide="shield" class="w-4 h-4"></i>
+              Safety
+            </button>
+          ` : "";
+
         const el = document.createElement("div");
         el.className = "panel rounded-2xl p-4";
         el.innerHTML = `
-          <div class="text-sm text-zinc-200 whitespace-pre-wrap">${escapeHtml(c.text)}</div>
-          <div class="mt-2 text-xs text-zinc-500">${escapeHtml(c.date || "")}</div>
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <div class="text-sm text-zinc-200 whitespace-pre-wrap">${escapeHtml(c.text)}</div>
+              <div class="mt-2 text-xs text-zinc-500">${escapeHtml(c.date || "")}</div>
+            </div>
+            ${safeBtn}
+          </div>
         `;
         list.appendChild(el);
       });
+
+      lucide.createIcons();
     }
 
     async function addComment() {
@@ -876,7 +1035,6 @@
 
         toast("Comment added", "ok");
         input.value = "";
-
         openPostModal(selectedPostId);
 
         const countEl = document.querySelector(`[data-commentcount="${selectedPostId}"]`);
@@ -929,111 +1087,6 @@
       }
     }
 
-    // ---------- ✅ NEW: SAFETY DETAILS ----------
-    let safetyTargetPostId = null;
-    let safetyTargetIp = null;
-
-    async function openSafetyDetails(postId) {
-      if (!isAdmin || !adminToken) return toast("Admin only", "bad");
-
-      safetyTargetPostId = postId;
-      safetyTargetIp = null;
-
-      toggleModal("safetyModal", true);
-      const body = document.getElementById("safetyBody");
-      body.innerHTML = skeleton();
-
-      try {
-        const res = await fetch(`/api/admin/posts/${postId}/details`, { headers: authHeaders() });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          toast(data.error || "Failed to load details", "bad");
-          closeSafetyDetails();
-          return;
-        }
-
-        safetyTargetIp = data.ip || null;
-
-        body.innerHTML = `
-          <div class="space-y-3">
-            <div class="panel rounded-2xl p-4">
-              <div class="text-xs text-zinc-500">Poster IP</div>
-              <div class="mt-1 font-mono text-sm text-zinc-200 break-all">${escapeHtml(data.ip || "unknown")}</div>
-            </div>
-
-            <div class="grid sm:grid-cols-2 gap-3">
-              <div class="panel rounded-2xl p-4">
-                <div class="text-xs text-zinc-500">Device</div>
-                <div class="mt-1 text-sm text-zinc-200">
-                  ${escapeHtml((data.device && data.device.type) ? data.device.type : "unknown")}
-                  ${data.device && (data.device.vendor || data.device.model) ? ` • ${escapeHtml((data.device.vendor || "") + " " + (data.device.model || ""))}` : ""}
-                </div>
-              </div>
-
-              <div class="panel rounded-2xl p-4">
-                <div class="text-xs text-zinc-500">Browser</div>
-                <div class="mt-1 text-sm text-zinc-200">
-                  ${escapeHtml((data.browser && data.browser.name) ? data.browser.name : "unknown")}
-                  ${data.browser && data.browser.version ? ` • ${escapeHtml(data.browser.version)}` : ""}
-                </div>
-              </div>
-
-              <div class="panel rounded-2xl p-4">
-                <div class="text-xs text-zinc-500">OS</div>
-                <div class="mt-1 text-sm text-zinc-200">
-                  ${escapeHtml((data.os && data.os.name) ? data.os.name : "unknown")}
-                  ${data.os && data.os.version ? ` • ${escapeHtml(data.os.version)}` : ""}
-                </div>
-              </div>
-
-              <div class="panel rounded-2xl p-4">
-                <div class="text-xs text-zinc-500">Language</div>
-                <div class="mt-1 text-sm text-zinc-200">
-                  ${escapeHtml((data.network && data.network.acceptLanguage) ? data.network.acceptLanguage : "unknown")}
-                </div>
-              </div>
-            </div>
-
-            <div class="panel rounded-2xl p-4">
-              <div class="text-xs text-zinc-500">Location / ISP (optional)</div>
-              <div class="mt-2 text-sm text-zinc-200">
-                City: <span class="text-zinc-300">${escapeHtml(data.geo && data.geo.city ? data.geo.city : "not available")}</span><br/>
-                Region: <span class="text-zinc-300">${escapeHtml(data.geo && data.geo.region ? data.geo.region : "not available")}</span><br/>
-                Country: <span class="text-zinc-300">${escapeHtml(data.geo && data.geo.country ? data.geo.country : "not available")}</span><br/>
-                ISP/Org: <span class="text-zinc-300">${escapeHtml(data.geo && data.geo.ispOrg ? data.geo.ispOrg : "not available")}</span>
-              </div>
-              <div class="mt-2 text-xs text-zinc-500">
-                Tip: set <span class="font-mono">IPINFO_TOKEN</span> secret to enable city/ISP lookup.
-              </div>
-            </div>
-          </div>
-        `;
-
-        // wire buttons
-        document.getElementById("safetyDeleteBtn").onclick = () => adminDeletePost(safetyTargetPostId);
-        document.getElementById("safetyBanBtn").onclick = () => adminBanIpFromDetails();
-
-        lucide.createIcons();
-      } catch (e) {
-        toast("Network error", "bad");
-        closeSafetyDetails();
-      }
-    }
-
-    function closeSafetyDetails() {
-      safetyTargetPostId = null;
-      safetyTargetIp = null;
-      toggleModal("safetyModal", false);
-    }
-
-    async function adminBanIpFromDetails() {
-      if (!safetyTargetIp) return toast("No IP available", "warn");
-      const ok = confirm(`Ban this IP?\n\n${safetyTargetIp}`);
-      if (!ok) return;
-      await adminBanIp(safetyTargetIp);
-      toast("IP banned (details)", "ok");
-    }
-
     // ---------- Feed render ----------
     function renderPosts(posts) {
       const feed = document.getElementById('feed');
@@ -1058,13 +1111,7 @@
         const text = escapeHtml(post.text || '');
         const date = escapeHtml(post.date || '');
 
-        const imgHtml = post.image
-          ? `
-            <button class="w-full bg-black/30 border-b border-white/10" onclick="openPostModal(${post.id})">
-              <img src="${post.image}" class="w-full max-h-[520px] object-contain mx-auto" />
-            </button>
-          `
-          : '';
+        const mediaHtml = renderAttachments(post.attachments || [], "feed");
 
         const adminDeleteBtn = (isAdmin && adminToken)
           ? `
@@ -1074,17 +1121,18 @@
           ` : '';
 
         el.innerHTML = `
-          ${imgHtml}
           <div class="p-5">
             <div class="flex items-start justify-between gap-3">
-              <button class="text-left flex-1" onclick="openPostModal(${post.id})">
-                <h3 class="font-extrabold text-lg text-zinc-100 leading-snug">${title}</h3>
-                <div class="mt-2 text-sm text-zinc-300/90 whitespace-pre-wrap line-clamp-5">${text}</div>
+              <button class="text-left flex-1 min-w-0" onclick="openPostModal(${post.id})">
+                <h3 class="font-extrabold text-lg text-zinc-100 leading-snug truncate">${title}</h3>
+                <div class="mt-2 text-sm text-zinc-300/90 whitespace-pre-wrap line-clamp-4">${text}</div>
               </button>
-              ${adminDeleteBtn}
+              <div class="shrink-0">${adminDeleteBtn}</div>
             </div>
 
-            <div class="mt-4 flex flex-wrap gap-2">
+            ${mediaHtml}
+
+            <div class="action-row mt-4">
               <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200" onclick="likePost(${post.id})">
                 <i data-lucide="thumbs-up" class="w-4 h-4"></i>
                 <span data-likecount="${post.id}">${post.likes || 0}</span>
@@ -1106,8 +1154,8 @@
               </button>
             </div>
 
-            <div class="mt-4 flex items-center justify-between text-xs text-zinc-500">
-              <div class="flex items-center gap-2">
+            <div class="mt-4 flex items-center justify-between gap-2 text-xs text-zinc-500 flex-wrap">
+              <div class="flex items-center gap-2 flex-wrap">
                 <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 ring-soft">
                   <i data-lucide="user" class="w-3.5 h-3.5"></i>
                   Anonymous
@@ -1133,21 +1181,17 @@
       lucide.createIcons();
     }
 
-    // ---------- Admin Panel ----------
+    // ---------- Admin Panel (existing functions) ----------
     async function openAdminPanel() {
       if (!isAdmin || !adminToken) return toast("Admin only", "bad");
       toggleModal("adminModal", true);
       toggleDrawer(false);
       await adminTab("posts");
     }
-
-    function closeAdminPanel() {
-      toggleModal("adminModal", false);
-    }
+    function closeAdminPanel() { toggleModal("adminModal", false); }
 
     async function adminTab(tab) {
       if (!isAdmin || !adminToken) return toast("Admin only", "bad");
-
       const adminMeta = document.getElementById("adminMeta");
       const content = document.getElementById("adminContent");
       content.innerHTML = skeleton();
@@ -1155,12 +1199,7 @@
 
       try {
         const statusRes = await fetch("/api/admin/status", { headers: authHeaders() });
-        if (!statusRes.ok) {
-          toast("Admin session expired", "bad");
-          logoutAdmin();
-          closeAdminPanel();
-          return;
-        }
+        if (!statusRes.ok) { toast("Admin session expired", "bad"); logoutAdmin(); closeAdminPanel(); return; }
         const status = await statusRes.json();
         adminMeta.textContent = `Maintenance: ${status.maintenance ? "ON" : "OFF"} • Bans: ${status.bannedCount} • Reports: ${status.reportsCount}`;
 
@@ -1178,7 +1217,7 @@
                       <div class="font-extrabold">${escapeHtml(p.title || "Untitled")}</div>
                       <div class="text-sm text-zinc-300 mt-1 whitespace-pre-wrap">${escapeHtml(p.text || "")}</div>
                       <div class="text-xs text-zinc-500 mt-2">Owner IP: <span class="text-zinc-300">${escapeHtml(p.ownerIp)}</span></div>
-                      <div class="text-xs text-zinc-500 mt-1">Likes: ${p.likes} • Dislikes: ${p.dislikes} • Comments: ${p.comments.length}</div>
+                      <div class="text-xs text-zinc-500 mt-1">Likes: ${p.likes} • Dislikes: ${p.dislikes} • Comments: ${p.comments.length} • Files: ${(p.attachments||[]).length}</div>
                     </div>
 
                     <div class="flex flex-col gap-2">
@@ -1202,10 +1241,7 @@
           const res = await fetch("/api/admin/reports", { headers: authHeaders() });
           const data = await res.json();
 
-          if (!data.length) {
-            content.innerHTML = `<div class="text-sm text-zinc-500">No reports right now.</div>`;
-            return;
-          }
+          if (!data.length) { content.innerHTML = `<div class="text-sm text-zinc-500">No reports right now.</div>`; return; }
 
           content.innerHTML = `
             <div class="text-sm text-zinc-400 mb-3">Reports (includes reporter IP + owner IP; admin-only)</div>
@@ -1289,7 +1325,6 @@
         if (tab === "maintenance") {
           content.innerHTML = `
             <div class="text-sm text-zinc-400 mb-3">Maintenance mode blocks normal users. Admins can bypass.</div>
-
             <div class="panel rounded-2xl p-5">
               <div class="flex items-center justify-between gap-4">
                 <div>
@@ -1332,9 +1367,7 @@
         if (!document.getElementById("adminModal").classList.contains("hidden")) {
           await adminTab("posts");
         }
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     async function adminIgnoreReport(id) {
@@ -1345,9 +1378,7 @@
         if (!res.ok) return toast(data.error || "Ignore failed", "bad");
         toast("Report ignored", "ok");
         await adminTab("reports");
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     function adminBanIpPrompt(ip) {
@@ -1378,9 +1409,7 @@
           await adminTab("bans");
         }
         await checkMaintenance();
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     async function adminUnbanIp(ip) {
@@ -1395,9 +1424,7 @@
         toast("IP unbanned", "ok");
         await adminTab("bans");
         await checkMaintenance();
-      } catch (e) {
-        toast("Network error", "bad");
-      }
+      } catch (e) { toast("Network error", "bad"); }
     }
 
     async function setMaintenance(enabled) {
@@ -1412,9 +1439,131 @@
         toast(`Maintenance ${enabled ? "enabled" : "disabled"}`, enabled ? "warn" : "ok");
         await checkMaintenance();
         await adminTab("maintenance");
+      } catch (e) { toast("Network error", "bad"); }
+    }
+
+    // ---------- Safety modal (post + comment) ----------
+    function closeSafetyDetails() {
+      safetyTargetPostId = null;
+      safetyTargetIp = null;
+      toggleModal("safetyModal", false);
+    }
+
+    async function openPostSafety(postId) {
+      if (!isAdmin || !adminToken) return toast("Admin only", "bad");
+      document.getElementById("safetyTitle").textContent = "Post Safety Details";
+      safetyTargetPostId = postId;
+      safetyTargetIp = null;
+
+      toggleModal("safetyModal", true);
+      const body = document.getElementById("safetyBody");
+      body.innerHTML = skeleton();
+
+      try {
+        const res = await fetch(`/api/admin/posts/${postId}/details`, { headers: authHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(data.error || "Failed", "bad"); closeSafetyDetails(); return; }
+        safetyTargetIp = data.ip || null;
+
+        body.innerHTML = safetyHtml(data);
+        document.getElementById("safetyDeleteBtn").onclick = () => adminDeletePost(safetyTargetPostId);
+        document.getElementById("safetyBanBtn").onclick = () => safetyBanIp();
+        lucide.createIcons();
       } catch (e) {
         toast("Network error", "bad");
+        closeSafetyDetails();
       }
+    }
+
+    async function openCommentSafety(postId, commentId) {
+      if (!isAdmin || !adminToken) return toast("Admin only", "bad");
+      document.getElementById("safetyTitle").textContent = "Comment Safety Details";
+      safetyTargetPostId = postId;
+      safetyTargetIp = null;
+
+      toggleModal("safetyModal", true);
+      const body = document.getElementById("safetyBody");
+      body.innerHTML = skeleton();
+
+      try {
+        const res = await fetch(`/api/admin/posts/${postId}/comments/${commentId}/details`, { headers: authHeaders() });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(data.error || "Failed", "bad"); closeSafetyDetails(); return; }
+        safetyTargetIp = data.ip || null;
+
+        body.innerHTML = safetyHtml(data);
+        // comment safety still deletes POST (requested: ban + delete post button)
+        document.getElementById("safetyDeleteBtn").onclick = () => adminDeletePost(safetyTargetPostId);
+        document.getElementById("safetyBanBtn").onclick = () => safetyBanIp();
+        lucide.createIcons();
+      } catch (e) {
+        toast("Network error", "bad");
+        closeSafetyDetails();
+      }
+    }
+
+    function safetyHtml(data) {
+      const geo = data.geo || {};
+      return `
+        <div class="space-y-3">
+          <div class="panel rounded-2xl p-4">
+            <div class="text-xs text-zinc-500">IP</div>
+            <div class="mt-1 font-mono text-sm text-zinc-200 break-all">${escapeHtml(data.ip || "unknown")}</div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="panel rounded-2xl p-4">
+              <div class="text-xs text-zinc-500">Device</div>
+              <div class="mt-1 text-sm text-zinc-200">
+                ${escapeHtml(data.device?.type || "unknown")}
+                ${(data.device?.vendor || data.device?.model) ? ` • ${escapeHtml((data.device?.vendor||"") + " " + (data.device?.model||""))}` : ""}
+              </div>
+            </div>
+
+            <div class="panel rounded-2xl p-4">
+              <div class="text-xs text-zinc-500">Browser</div>
+              <div class="mt-1 text-sm text-zinc-200">
+                ${escapeHtml(data.browser?.name || "unknown")}
+                ${data.browser?.version ? ` • ${escapeHtml(data.browser.version)}` : ""}
+              </div>
+            </div>
+
+            <div class="panel rounded-2xl p-4">
+              <div class="text-xs text-zinc-500">OS</div>
+              <div class="mt-1 text-sm text-zinc-200">
+                ${escapeHtml(data.os?.name || "unknown")}
+                ${data.os?.version ? ` • ${escapeHtml(data.os.version)}` : ""}
+              </div>
+            </div>
+
+            <div class="panel rounded-2xl p-4">
+              <div class="text-xs text-zinc-500">Language</div>
+              <div class="mt-1 text-sm text-zinc-200">
+                ${escapeHtml(data.network?.acceptLanguage || "unknown")}
+              </div>
+            </div>
+          </div>
+
+          <div class="panel rounded-2xl p-4">
+            <div class="text-xs text-zinc-500">Location / ISP (optional)</div>
+            <div class="mt-2 text-sm text-zinc-200">
+              City: <span class="text-zinc-300">${escapeHtml(geo.city || "not available")}</span><br/>
+              Region: <span class="text-zinc-300">${escapeHtml(geo.region || "not available")}</span><br/>
+              Country: <span class="text-zinc-300">${escapeHtml(geo.country || "not available")}</span><br/>
+              ISP/Org: <span class="text-zinc-300">${escapeHtml(geo.ispOrg || "not available")}</span>
+            </div>
+            <div class="mt-2 text-xs text-zinc-500">
+              Tip: set <span class="font-mono">IPINFO_TOKEN</span> secret to enable city/ISP lookup.
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function safetyBanIp() {
+      if (!safetyTargetIp) return toast("No IP available", "warn");
+      if (!confirm(`Ban this IP?\n\n${safetyTargetIp}`)) return;
+      await adminBanIp(safetyTargetIp);
     }
 
     // ---------- Init ----------
