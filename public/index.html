@@ -51,6 +51,7 @@
       font-weight: 700;
       transition: transform .08s ease, background .2s ease, box-shadow .2s ease;
       white-space: nowrap;
+      max-width: 100%;
     }
     .btn:active { transform: translateY(1px); }
     .toast { animation: toastIn .2s ease-out; }
@@ -66,11 +67,12 @@
     .media-card { border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.25); border-radius: 16px; overflow:hidden; }
     .file-pill { border: 1px solid rgba(255,255,255,0.10); border-radius: 9999px; padding: .4rem .7rem; display:flex; gap:.4rem; align-items:center; }
 
-    /* ✅ FIX (mobile): keep modal inside screen + make preview list scroll */
+    /* Better mobile: keep modal within viewport and allow internal scroll */
     .modal-panel-scroll {
       max-height: calc(100vh - 2rem);
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      overflow-x: hidden;
     }
     .preview-scroll {
       max-height: 40vh;
@@ -80,6 +82,50 @@
     }
     @media (min-width: 640px) {
       .preview-scroll { max-height: 45vh; }
+    }
+
+    /* Lightbox (media viewer) */
+    .viewer-toolbar {
+      background: rgba(10, 10, 14, 0.55);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .viewer-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      touch-action: pan-y; /* allow vertical scroll if needed on page, but we handle horizontal swipe */
+    }
+    .viewer-media-wrap {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+    .viewer-img {
+      max-width: 100%;
+      max-height: 82vh;
+      user-select: none;
+      -webkit-user-drag: none;
+      touch-action: none; /* we handle pinch/pan */
+      transform-origin: center center;
+      will-change: transform;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.25);
+    }
+    .viewer-video {
+      width: 100%;
+      max-width: 980px;
+      max-height: 82vh;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .viewer-counter {
+      font-variant-numeric: tabular-nums;
     }
   </style>
 </head>
@@ -245,7 +291,6 @@
   <div id="uploadModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="toggleModal('uploadModal', false)"></div>
 
-    <!-- ✅ FIX: add modal-panel-scroll so it never goes out of screen -->
     <div class="relative w-full max-w-xl panel rounded-[28px] p-5 sm:p-6 shadow-2xl fade-up modal-panel-scroll">
       <div class="flex items-start justify-between gap-4">
         <div>
@@ -292,7 +337,6 @@
               <div id="fileCount" class="text-xs text-zinc-500"></div>
             </div>
 
-            <!-- ✅ FIX: add preview-scroll so previews scroll instead of pushing modal off-screen -->
             <div id="previewList" class="hidden mt-3 space-y-2 preview-scroll"></div>
           </div>
 
@@ -303,9 +347,10 @@
             </div>
           </div>
 
-          <div class="sm:col-span-2 flex items-center justify-between pt-1">
+          <!-- ✅ FIX: on mobile button is FULL WIDTH (no horizontal scroll needed) -->
+          <div class="sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
             <div class="text-xs text-zinc-500">Profanity filter enabled</div>
-            <button type="submit" class="btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20">
+            <button type="submit" class="btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 w-full sm:w-auto">
               <i data-lucide="send" class="w-4 h-4"></i>
               Post
             </button>
@@ -345,7 +390,7 @@
   <!-- Post Detail Modal -->
   <div id="postModal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="closePostModal()"></div>
-    <div class="relative w-full max-w-3xl panel rounded-[28px] p-4 sm:p-6 shadow-2xl fade-up">
+    <div class="relative w-full max-w-3xl panel rounded-[28px] p-4 sm:p-6 shadow-2xl fade-up modal-panel-scroll">
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
           <h2 id="postModalTitle" class="text-xl font-extrabold truncate">Post</h2>
@@ -378,7 +423,7 @@
   <!-- Report Modal -->
   <div id="reportModal" class="fixed inset-0 z-[65] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="toggleModal('reportModal', false)"></div>
-    <div class="relative w-full max-w-lg panel rounded-[28px] p-6 shadow-2xl fade-up">
+    <div class="relative w-full max-w-lg panel rounded-[28px] p-6 shadow-2xl fade-up modal-panel-scroll">
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-xl font-extrabold">Report Post</h2>
@@ -413,7 +458,7 @@
     </div>
   </div>
 
-  <!-- Admin Panel Modal (unchanged layout, still works) -->
+  <!-- Admin Panel Modal -->
   <div id="adminModal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="closeAdminPanel()"></div>
     <div class="relative w-full max-w-6xl panel rounded-[28px] p-4 sm:p-6 shadow-2xl fade-up overflow-hidden">
@@ -446,10 +491,10 @@
     </div>
   </div>
 
-  <!-- ✅ Safety Details Modal (for post OR comment) -->
+  <!-- Safety Details Modal -->
   <div id="safetyModal" class="fixed inset-0 z-[75] hidden flex items-center justify-center p-4">
     <div class="absolute inset-0 modal-bg" onclick="closeSafetyDetails()"></div>
-    <div class="relative w-full max-w-2xl panel rounded-[28px] p-6 shadow-2xl fade-up">
+    <div class="relative w-full max-w-2xl panel rounded-[28px] p-6 shadow-2xl fade-up modal-panel-scroll">
       <div class="flex items-start justify-between gap-4">
         <div class="min-w-0">
           <h2 id="safetyTitle" class="text-xl font-extrabold truncate">Safety Details</h2>
@@ -470,6 +515,45 @@
           <i data-lucide="ban" class="w-4 h-4"></i> Ban IP
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ✅ Media Viewer (tap image/video → fullscreen, swipe next/prev, zoom images) -->
+  <div id="mediaViewer" class="fixed inset-0 z-[98] hidden">
+    <div class="absolute inset-0 bg-black/90" onclick="closeMediaViewer()"></div>
+
+    <div class="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+      <div class="viewer-toolbar rounded-2xl px-3 py-2 flex items-center gap-2">
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="prevMedia(event)">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i>
+        </button>
+        <div class="text-xs text-zinc-300 viewer-counter px-2">
+          <span id="viewerCounter">1 / 1</span>
+        </div>
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="nextMedia(event)">
+          <i data-lucide="chevron-right" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="viewer-toolbar rounded-2xl px-3 py-2 flex items-center gap-2">
+        <button id="zoomOutBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomOut(event)">
+          <i data-lucide="zoom-out" class="w-5 h-5"></i>
+        </button>
+        <button id="zoomResetBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomReset(event)">
+          <i data-lucide="maximize-2" class="w-5 h-5"></i>
+        </button>
+        <button id="zoomInBtn" class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="zoomIn(event)">
+          <i data-lucide="zoom-in" class="w-5 h-5"></i>
+        </button>
+
+        <button class="btn bg-white/5 hover:bg-white/10 ring-soft text-zinc-200 px-3 py-2" onclick="closeMediaViewer(event)">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="viewerStage" class="viewer-stage absolute inset-0 pt-20 pb-6 px-3">
+      <div id="viewerWrap" class="viewer-media-wrap"></div>
     </div>
   </div>
 
@@ -495,6 +579,26 @@
     // upload state
     const postFilesInput = document.getElementById("postFiles");
     let selectedFiles = [];
+
+    // viewer state (current post attachments)
+    let viewerItems = [];
+    let viewerIndex = 0;
+
+    // viewer zoom/pan state (images)
+    let viewerScale = 1;
+    let viewerTx = 0;
+    let viewerTy = 0;
+    let viewerPointers = new Map(); // pointerId -> {x,y}
+    let viewerStartScale = 1;
+    let viewerStartTx = 0;
+    let viewerStartTy = 0;
+    let viewerStartDist = 0;
+    let viewerIsPanning = false;
+    let viewerLastPan = { x: 0, y: 0 };
+    let viewerIsImage = false;
+
+    // swipe state for stage
+    let stageSwipe = { active: false, x0: 0, y0: 0, moved: false };
 
     // ---------- Helpers ----------
     function escapeHtml(str) {
@@ -747,9 +851,6 @@
 
     function removeSelectedFile(index) {
       selectedFiles.splice(index, 1);
-
-      // rebuild FileList is not directly possible, so we just keep selectedFiles array
-      // and upload from that array.
       renderFilePreview();
     }
 
@@ -775,7 +876,6 @@
       formData.append('title', document.getElementById('postTitle').value);
       formData.append('text', document.getElementById('postText').value);
 
-      // upload from selectedFiles array (supports "remove" even though FileList can't be edited)
       for (const f of selectedFiles) formData.append('files', f);
 
       try {
@@ -877,26 +977,37 @@
       const shown = (mode === "feed") ? at.slice(0, maxFeedItems) : at;
       const extra = (mode === "feed" && at.length > maxFeedItems) ? (at.length - maxFeedItems) : 0;
 
-      const items = shown.map(a => {
+      const items = shown.map((a, idx) => {
         const url = a.url;
         const name = escapeHtml(a.name || "file");
         const kind = a.kind || "file";
 
+        const click = (mode === "detail")
+          ? `onclick="openMediaViewer(${idx})"`
+          : "";
+
         if (kind === "image") {
           return `
-            <div class="media-card">
+            <button type="button" class="media-card text-left" ${click} aria-label="Open image">
               <img src="${url}" class="w-full h-40 sm:h-44 object-cover" loading="lazy"/>
-            </div>
+            </button>
           `;
         }
         if (kind === "video") {
           return `
-            <div class="media-card p-2">
-              <video controls class="w-full rounded-xl bg-black/40">
-                <source src="${url}" type="${a.mimetype || 'video/mp4'}">
-              </video>
+            <button type="button" class="media-card p-2 text-left" ${click} aria-label="Open video">
+              <div class="relative">
+                <video class="w-full rounded-xl bg-black/40 pointer-events-none" muted playsinline preload="metadata">
+                  <source src="${url}" type="${a.mimetype || 'video/mp4'}">
+                </video>
+                <div class="absolute inset-0 grid place-items-center">
+                  <div class="w-12 h-12 rounded-2xl bg-black/55 ring-soft flex items-center justify-center">
+                    <i data-lucide="play" class="w-6 h-6 text-zinc-100"></i>
+                  </div>
+                </div>
+              </div>
               <div class="mt-2 text-xs text-zinc-500 truncate">${name}</div>
-            </div>
+            </button>
           `;
         }
         if (kind === "audio") {
@@ -956,6 +1067,9 @@
 
         document.getElementById("postModalTitle").textContent = post.title || "Untitled";
         document.getElementById("postModalMeta").textContent = `Anonymous • ${post.date || ""}`;
+
+        // ✅ set viewer items to THIS post attachments so viewer can swipe
+        viewerItems = Array.isArray(post.attachments) ? post.attachments : [];
 
         const adminSafetyBtn = (isAdmin && adminToken)
           ? `
@@ -1105,6 +1219,331 @@
       }
     }
 
+    // ---------- Media Viewer (fullscreen, swipe, zoom images) ----------
+    function openMediaViewer(index) {
+      if (!Array.isArray(viewerItems) || !viewerItems.length) return;
+      viewerIndex = Math.max(0, Math.min(Number(index || 0), viewerItems.length - 1));
+      resetViewerTransform(true);
+      toggleModal("mediaViewer", true);
+      renderViewer();
+      lockScroll(true);
+      lucide.createIcons();
+    }
+
+    function closeMediaViewer(e) {
+      if (e) e.stopPropagation();
+      toggleModal("mediaViewer", false);
+      clearViewerPointers();
+      lockScroll(false);
+      // stop any video playback when closing
+      const wrap = document.getElementById("viewerWrap");
+      const vid = wrap.querySelector("video");
+      if (vid) { try { vid.pause(); } catch(_){} }
+    }
+
+    function lockScroll(on) {
+      document.body.style.overflow = on ? "hidden" : "";
+    }
+
+    function setViewerCounter() {
+      document.getElementById("viewerCounter").textContent = `${viewerIndex + 1} / ${viewerItems.length}`;
+    }
+
+    function renderViewer() {
+      const wrap = document.getElementById("viewerWrap");
+      wrap.innerHTML = "";
+
+      const item = viewerItems[viewerIndex];
+      const kind = item?.kind || "file";
+      const url = item?.url;
+
+      setViewerCounter();
+
+      const zoomBtns = ["zoomInBtn","zoomOutBtn","zoomResetBtn"];
+      viewerIsImage = (kind === "image");
+
+      zoomBtns.forEach(id => {
+        const el = document.getElementById(id);
+        el.style.opacity = viewerIsImage ? "1" : "0.45";
+        el.style.pointerEvents = viewerIsImage ? "auto" : "none";
+      });
+
+      if (kind === "image") {
+        const img = document.createElement("img");
+        img.className = "viewer-img";
+        img.src = url;
+        img.alt = item?.name || "image";
+
+        img.addEventListener("pointerdown", viewerPointerDown);
+        img.addEventListener("pointermove", viewerPointerMove);
+        img.addEventListener("pointerup", viewerPointerUp);
+        img.addEventListener("pointercancel", viewerPointerUp);
+
+        img.addEventListener("dblclick", (ev) => {
+          ev.preventDefault();
+          if (viewerScale <= 1.05) {
+            viewerScale = 2;
+            viewerTx = 0;
+            viewerTy = 0;
+          } else {
+            viewerScale = 1;
+            viewerTx = 0;
+            viewerTy = 0;
+          }
+          applyViewerTransform(img);
+        });
+
+        wrap.appendChild(img);
+        applyViewerTransform(img);
+      } else if (kind === "video") {
+        const box = document.createElement("div");
+        box.className = "viewer-video";
+
+        const vid = document.createElement("video");
+        vid.controls = true;
+        vid.playsInline = true;
+        vid.className = "w-full h-full";
+        const src = document.createElement("source");
+        src.src = url;
+        src.type = item?.mimetype || "video/mp4";
+        vid.appendChild(src);
+
+        box.appendChild(vid);
+        wrap.appendChild(box);
+      } else {
+        // fallback: open file link
+        wrap.innerHTML = `
+          <div class="panel rounded-3xl p-6 text-center max-w-xl mx-auto">
+            <div class="w-14 h-14 mx-auto rounded-3xl bg-white/5 ring-soft flex items-center justify-center">
+              <i data-lucide="file" class="w-7 h-7 text-zinc-200"></i>
+            </div>
+            <div class="mt-4 font-extrabold text-lg">${escapeHtml(item?.name || "File")}</div>
+            <div class="mt-2 text-sm text-zinc-500">This file type opens in a new tab.</div>
+            <a class="mt-5 btn bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 w-full" href="${url}" target="_blank" rel="noopener">
+              <i data-lucide="external-link" class="w-4 h-4"></i> Open
+            </a>
+          </div>
+        `;
+        lucide.createIcons();
+      }
+    }
+
+    function prevMedia(e) {
+      if (e) e.stopPropagation();
+      if (!viewerItems.length) return;
+      viewerIndex = (viewerIndex - 1 + viewerItems.length) % viewerItems.length;
+      resetViewerTransform(true);
+      renderViewer();
+      lucide.createIcons();
+    }
+
+    function nextMedia(e) {
+      if (e) e.stopPropagation();
+      if (!viewerItems.length) return;
+      viewerIndex = (viewerIndex + 1) % viewerItems.length;
+      resetViewerTransform(true);
+      renderViewer();
+      lucide.createIcons();
+    }
+
+    function zoomIn(e) {
+      if (e) e.stopPropagation();
+      if (!viewerIsImage) return;
+      viewerScale = Math.min(6, viewerScale + 0.35);
+      applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
+    }
+
+    function zoomOut(e) {
+      if (e) e.stopPropagation();
+      if (!viewerIsImage) return;
+      viewerScale = Math.max(1, viewerScale - 0.35);
+      if (viewerScale === 1) { viewerTx = 0; viewerTy = 0; }
+      applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
+    }
+
+    function zoomReset(e) {
+      if (e) e.stopPropagation();
+      resetViewerTransform(false);
+      applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
+    }
+
+    function resetViewerTransform(hard) {
+      viewerScale = 1;
+      viewerTx = 0;
+      viewerTy = 0;
+      viewerIsPanning = false;
+      clearViewerPointers();
+      if (hard) {
+        viewerStartScale = 1;
+        viewerStartTx = 0;
+        viewerStartTy = 0;
+        viewerStartDist = 0;
+      }
+    }
+
+    function applyViewerTransform(imgEl) {
+      if (!imgEl) return;
+      imgEl.style.transform = `translate(${viewerTx}px, ${viewerTy}px) scale(${viewerScale})`;
+    }
+
+    function clearViewerPointers() {
+      viewerPointers.clear();
+      viewerStartDist = 0;
+      viewerIsPanning = false;
+    }
+
+    function dist(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    function mid(a, b) {
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    }
+
+    function viewerPointerDown(e) {
+      e.stopPropagation();
+      const img = e.currentTarget;
+      img.setPointerCapture(e.pointerId);
+
+      viewerPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (viewerPointers.size === 1) {
+        viewerIsPanning = true;
+        viewerLastPan = { x: e.clientX, y: e.clientY };
+        viewerStartTx = viewerTx;
+        viewerStartTy = viewerTy;
+      }
+
+      if (viewerPointers.size === 2) {
+        const pts = Array.from(viewerPointers.values());
+        viewerStartDist = dist(pts[0], pts[1]);
+        viewerStartScale = viewerScale;
+        viewerStartTx = viewerTx;
+        viewerStartTy = viewerTy;
+      }
+
+      applyViewerTransform(img);
+    }
+
+    function viewerPointerMove(e) {
+      e.stopPropagation();
+      const img = e.currentTarget;
+      if (!viewerPointers.has(e.pointerId)) return;
+
+      viewerPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+      if (viewerPointers.size === 1 && viewerIsPanning && viewerScale > 1.01) {
+        const dx = e.clientX - viewerLastPan.x;
+        const dy = e.clientY - viewerLastPan.y;
+        viewerTx += dx;
+        viewerTy += dy;
+        viewerLastPan = { x: e.clientX, y: e.clientY };
+      }
+
+      if (viewerPointers.size === 2) {
+        const pts = Array.from(viewerPointers.values());
+        const d = dist(pts[0], pts[1]);
+        if (viewerStartDist > 0) {
+          const ratio = d / viewerStartDist;
+          viewerScale = Math.min(6, Math.max(1, viewerStartScale * ratio));
+          if (viewerScale <= 1.01) {
+            viewerScale = 1;
+            viewerTx = 0;
+            viewerTy = 0;
+          }
+        }
+      }
+
+      applyViewerTransform(img);
+    }
+
+    function viewerPointerUp(e) {
+      e.stopPropagation();
+      const img = e.currentTarget;
+      if (img && img.releasePointerCapture) {
+        try { img.releasePointerCapture(e.pointerId); } catch(_) {}
+      }
+      viewerPointers.delete(e.pointerId);
+
+      if (viewerPointers.size === 0) {
+        viewerIsPanning = false;
+        if (viewerScale <= 1.01) {
+          viewerScale = 1;
+          viewerTx = 0;
+          viewerTy = 0;
+        }
+        applyViewerTransform(document.querySelector("#viewerWrap .viewer-img"));
+      }
+
+      if (viewerPointers.size === 1) {
+        const pt = Array.from(viewerPointers.values())[0];
+        viewerLastPan = { x: pt.x, y: pt.y };
+      }
+    }
+
+    // swipe on stage (next/prev)
+    (function setupViewerSwipe() {
+      const stage = document.getElementById("viewerStage");
+
+      stage.addEventListener("touchstart", (e) => {
+        if (!document.getElementById("mediaViewer") || document.getElementById("mediaViewer").classList.contains("hidden")) return;
+        if (!e.touches || e.touches.length !== 1) return;
+
+        stageSwipe.active = true;
+        stageSwipe.moved = false;
+        stageSwipe.x0 = e.touches[0].clientX;
+        stageSwipe.y0 = e.touches[0].clientY;
+      }, { passive: true });
+
+      stage.addEventListener("touchmove", (e) => {
+        if (!stageSwipe.active) return;
+        if (!e.touches || e.touches.length !== 1) return;
+
+        const x = e.touches[0].clientX;
+        const y = e.touches[0].clientY;
+        const dx = x - stageSwipe.x0;
+        const dy = y - stageSwipe.y0;
+
+        if (Math.abs(dx) > 10) stageSwipe.moved = true;
+
+        // if horizontal swipe, prevent scroll
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      stage.addEventListener("touchend", (e) => {
+        if (!stageSwipe.active) return;
+        stageSwipe.active = false;
+
+        // if user is zoomed in on image, don't swipe between media (they probably panning)
+        if (viewerIsImage && viewerScale > 1.01) return;
+
+        // compute swipe
+        const changed = e.changedTouches && e.changedTouches[0];
+        if (!changed) return;
+
+        const dx = changed.clientX - stageSwipe.x0;
+        const dy = changed.clientY - stageSwipe.y0;
+
+        if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60) {
+          if (dx < 0) nextMedia();
+          else prevMedia();
+        }
+      }, { passive: true });
+    })();
+
+    // keyboard support
+    document.addEventListener("keydown", (e) => {
+      const open = !document.getElementById("mediaViewer").classList.contains("hidden");
+      if (!open) return;
+      if (e.key === "Escape") closeMediaViewer();
+      if (e.key === "ArrowLeft") prevMedia();
+      if (e.key === "ArrowRight") nextMedia();
+    });
+
     // ---------- Feed render ----------
     function renderPosts(posts) {
       const feed = document.getElementById('feed');
@@ -1199,7 +1638,7 @@
       lucide.createIcons();
     }
 
-    // ---------- Admin Panel (existing functions) ----------
+    // ---------- Admin Panel ----------
     async function openAdminPanel() {
       if (!isAdmin || !adminToken) return toast("Admin only", "bad");
       toggleModal("adminModal", true);
@@ -1460,7 +1899,7 @@
       } catch (e) { toast("Network error", "bad"); }
     }
 
-    // ---------- Safety modal (post + comment) ----------
+    // ---------- Safety modal ----------
     function closeSafetyDetails() {
       safetyTargetPostId = null;
       safetyTargetIp = null;
@@ -1510,7 +1949,6 @@
         safetyTargetIp = data.ip || null;
 
         body.innerHTML = safetyHtml(data);
-        // comment safety still deletes POST (requested: ban + delete post button)
         document.getElementById("safetyDeleteBtn").onclick = () => adminDeletePost(safetyTargetPostId);
         document.getElementById("safetyBanBtn").onclick = () => safetyBanIp();
         lucide.createIcons();
