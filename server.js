@@ -17,42 +17,46 @@ if (!fs.existsSync('./uploads')) {
   fs.mkdirSync('./uploads');
 }
 
+// -------------------- MULTER (MULTI-FILE, MANY TYPES) --------------------
+// NOTE: GitHub Actions runner disk is limited, but we allow "high" limits here.
 const storage = multer.diskStorage({
   destination: './uploads',
-  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+  filename: (req, file, cb) => {
+    const safeExt = path.extname(file.originalname || '').slice(0, 12);
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + safeExt);
+  }
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: {
+    fileSize: 500 * 1024 * 1024,  // 500MB per file (high)
+    files: 50                      // up to 50 files per post
+  },
   fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|gif|webp/;
-    const mimetype = filetypes.test(file.mimetype);
-    if (mimetype) return cb(null, true);
-    cb(new Error('Only images are allowed!'));
+    // Allow almost anything. (You can restrict later if you want.)
+    cb(null, true);
   }
 });
 
 // -------------------- AUTH / STATE --------------------
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-const ADMIN_TOKEN = "admin_token_active"; // kept same pattern as your existing UI expects
+const ADMIN_TOKEN = "admin_token_active";
 
 let maintenanceMode = false;
 let bannedIps = new Set();
-let posts = [];    // newest appended; UI reverses
-let reports = [];  // {id, postId, reason, message, reporterIp, timestamp}
+
+let posts = [];   // In-memory
+let reports = []; // {id, postId, reason, message, reporterIp, timestamp}
 
 // -------------------- IP HELPERS --------------------
 function getClientIp(req) {
-  // Cloudflare Tunnel commonly sets CF-Connecting-IP
   const cf = req.headers['cf-connecting-ip'];
   if (cf) return String(cf).split(',')[0].trim();
 
-  // Standard reverse proxy header
   const xff = req.headers['x-forwarded-for'];
   if (xff) return String(xff).split(',')[0].trim();
 
-  // Express / Node fallback
   return (req.socket && req.socket.remoteAddress) ? String(req.socket.remoteAddress) : "unknown";
 }
 
@@ -77,6 +81,37 @@ function nowStr() {
   return new Date().toLocaleString();
 }
 
+function normalizeAttachmentsFromLegacy(post) {
+  // Older versions had single "image" field.
+  // This keeps backward compatibility without removing anything.
+  if (!post.attachments) post.attachments = [];
+  if (post.image && !post.attachments.some(a => a.url === post.image)) {
+    post.attachments.unshift({
+      url: post.image,
+      name: "image",
+      mimetype: "image/*",
+      size: 0,
+      kind: "image"
+    });
+  }
+}
+
+function detectKind(mimetype = "", filename = "") {
+  const mt = String(mimetype).toLowerCase();
+  const fn = String(filename).toLowerCase();
+
+  if (mt.startsWith("image/")) return "image";
+  if (mt.startsWith("video/")) return "video";
+  if (mt.startsWith("audio/")) return "audio";
+
+  // simple fallback by extension
+  if (fn.match(/\.(png|jpg|jpeg|gif|webp)$/)) return "image";
+  if (fn.match(/\.(mp4|webm|mov|mkv)$/)) return "video";
+  if (fn.match(/\.(mp3|wav|ogg|m4a|aac|flac)$/)) return "audio";
+
+  return "file";
+}
+
 // -------------------- BASIC ROUTES --------------------
 app.get('/api/status', (req, res) => {
   res.json({ maintenance: maintenanceMode });
@@ -90,41 +125,61 @@ app.post('/api/login', (req, res) => {
   return res.status(401).json({ error: "Wrong password" });
 });
 
+// Safe feed (NO IP data)
 app.get('/api/posts', (req, res) => {
-  // normal users must never see IPs
-  const safe = posts.map(p => ({
-    id: p.id,
-    title: p.title,
-    text: p.text,
-    image: p.image,
-    date: p.date,
-    likes: p.likes,
-    dislikes: p.dislikes,
-    comments: p.comments.length
-  }));
+  const safe = posts.map(p => {
+    normalizeAttachmentsFromLegacy(p);
+    return {
+      id: p.id,
+      title: p.title,
+      text: p.text,
+      image: p.image || null, // keep legacy field
+      attachments: (p.attachments || []).map(a => ({
+        url: a.url,
+        name: a.name,
+        mimetype: a.mimetype,
+        size: a.size,
+        kind: a.kind
+      })),
+      date: p.date,
+      likes: p.likes,
+      dislikes: p.dislikes,
+      comments: p.comments.length
+    };
+  });
   res.json(safe.reverse());
 });
 
+// Safe detail view (NO IP data)
 app.get('/api/posts/:id', (req, res) => {
   const id = parseInt(req.params.id);
   const post = posts.find(p => p.id === id);
   if (!post) return res.status(404).json({ error: "Post not found" });
 
-  // normal users must never see IPs
+  normalizeAttachmentsFromLegacy(post);
+
   return res.json({
     id: post.id,
     title: post.title,
     text: post.text,
-    image: post.image,
+    image: post.image || null, // keep legacy field
+    attachments: (post.attachments || []).map(a => ({
+      url: a.url,
+      name: a.name,
+      mimetype: a.mimetype,
+      size: a.size,
+      kind: a.kind
+    })),
     date: post.date,
     likes: post.likes,
     dislikes: post.dislikes,
-    comments: post.comments.map(c => ({ text: c.text, date: c.date }))
+    comments: post.comments.map(c => ({ id: c.id, text: c.text, date: c.date }))
   });
 });
 
-// -------------------- UPLOAD (CREATE POST) --------------------
-app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.single('image'), (req, res) => {
+// -------------------- CREATE POST (MULTI FILES) --------------------
+// Frontend sends: files[] (many)
+app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.array('files', 50), (req, res) => {
   try {
     const title = (req.body.title || '').toString();
     const text = (req.body.text || '').toString();
@@ -137,11 +192,27 @@ app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.single('image'
     const ua = req.headers['user-agent'] || '';
     const createdAt = Date.now();
 
+    const files = Array.isArray(req.files) ? req.files : [];
+    const attachments = files.map(f => ({
+      url: `/uploads/${f.filename}`,
+      name: f.originalname || f.filename,
+      mimetype: f.mimetype || "application/octet-stream",
+      size: f.size || 0,
+      kind: detectKind(f.mimetype, f.originalname)
+    }));
+
     const newPost = {
       id: createdAt,
       title,
       text,
-      image: req.file ? `/uploads/${req.file.filename}` : null,
+
+      // keep legacy field (first image if any)
+      image: (() => {
+        const firstImg = attachments.find(a => a.kind === "image");
+        return firstImg ? firstImg.url : null;
+      })(),
+
+      attachments,
       date: nowStr(),
 
       // interactions
@@ -149,7 +220,7 @@ app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.single('image'
       dislikes: 0,
       comments: [],
 
-      // anti-spam / per-IP tracking
+      // per-IP voting
       likedBy: new Set(),
       dislikedBy: new Set(),
 
@@ -166,11 +237,13 @@ app.post('/api/upload', requireNotBannedAndNotMaintenance, upload.single('image'
     };
 
     posts.push(newPost);
+
     return res.status(201).json({
       id: newPost.id,
       title: newPost.title,
       text: newPost.text,
       image: newPost.image,
+      attachments: newPost.attachments,
       date: newPost.date,
       likes: newPost.likes,
       dislikes: newPost.dislikes,
@@ -189,10 +262,8 @@ app.post('/api/posts/:id/like', requireNotBannedAndNotMaintenance, (req, res) =>
 
   const ip = getClientIp(req);
 
-  // prevent multiple votes from same IP
   if (post.likedBy.has(ip)) return res.status(400).json({ error: "Already liked" });
 
-  // if previously disliked, remove dislike
   if (post.dislikedBy.has(ip)) {
     post.dislikedBy.delete(ip);
     post.dislikes = Math.max(0, post.dislikes - 1);
@@ -224,7 +295,7 @@ app.post('/api/posts/:id/dislike', requireNotBannedAndNotMaintenance, (req, res)
   return res.json({ likes: post.likes, dislikes: post.dislikes });
 });
 
-// -------------------- COMMENTS --------------------
+// -------------------- COMMENTS (store admin-only safety data) --------------------
 app.post('/api/posts/:id/comment', requireNotBannedAndNotMaintenance, (req, res) => {
   const id = parseInt(req.params.id);
   const post = posts.find(p => p.id === id);
@@ -232,10 +303,27 @@ app.post('/api/posts/:id/comment', requireNotBannedAndNotMaintenance, (req, res)
 
   const text = (req.body && req.body.text ? String(req.body.text) : "").trim();
   if (!text) return res.status(400).json({ error: "Empty comment" });
-
   if (filter.isProfane(text)) return res.status(400).json({ error: "Profanity detected." });
 
-  post.comments.push({ text, date: nowStr() });
+  const ip = getClientIp(req);
+  const ua = req.headers['user-agent'] || '';
+
+  const comment = {
+    id: Date.now() + Math.floor(Math.random() * 100000),
+    text,
+    date: nowStr(),
+
+    // admin-only:
+    commenterIp: ip,
+    commenterUa: ua,
+    commenterHeaders: {
+      acceptLanguage: req.headers['accept-language'] || '',
+      cfRay: req.headers['cf-ray'] || '',
+      cfIpcountry: req.headers['cf-ipcountry'] || ''
+    }
+  };
+
+  post.comments.push(comment);
   return res.json({ comments: post.comments.length });
 });
 
@@ -286,17 +374,21 @@ app.get('/api/admin/status', requireAdmin, (req, res) => {
 
 // -------------------- ADMIN POSTS --------------------
 app.get('/api/admin/posts', requireAdmin, (req, res) => {
-  const out = posts.slice().reverse().map(p => ({
-    id: p.id,
-    title: p.title,
-    text: p.text,
-    image: p.image,
-    date: p.date,
-    likes: p.likes,
-    dislikes: p.dislikes,
-    comments: p.comments,
-    ownerIp: p.ownerIp
-  }));
+  const out = posts.slice().reverse().map(p => {
+    normalizeAttachmentsFromLegacy(p);
+    return {
+      id: p.id,
+      title: p.title,
+      text: p.text,
+      image: p.image || null,
+      attachments: (p.attachments || []).map(a => ({ ...a })),
+      date: p.date,
+      likes: p.likes,
+      dislikes: p.dislikes,
+      comments: p.comments,
+      ownerIp: p.ownerIp
+    };
+  });
   res.json(out);
 });
 
@@ -304,7 +396,6 @@ app.delete('/api/admin/posts/:id', requireAdmin, (req, res) => {
   const id = parseInt(req.params.id);
   const before = posts.length;
   posts = posts.filter(p => p.id !== id);
-  // also remove related reports
   reports = reports.filter(r => r.postId !== id);
 
   if (posts.length === before) return res.status(404).json({ error: "Post not found" });
@@ -367,21 +458,17 @@ app.post('/api/admin/maintenance', requireAdmin, (req, res) => {
   return res.json({ success: true, maintenance: maintenanceMode });
 });
 
-// -------------------- ✅ ADMIN SAFETY DETAILS (NEW) --------------------
-// Optional IP geolocation: set IPINFO_TOKEN in env (GitHub Actions secret) to enable.
+// -------------------- OPTIONAL GEO LOOKUP (IPINFO_TOKEN) --------------------
 async function ipInfoLookup(ip) {
   const token = process.env.IPINFO_TOKEN;
   if (!token) return null;
 
   try {
-    // Node 18 has global fetch
     const resp = await fetch(`https://ipinfo.io/${encodeURIComponent(ip)}?token=${encodeURIComponent(token)}`, {
       headers: { 'Accept': 'application/json' }
     });
     if (!resp.ok) return null;
     const data = await resp.json();
-
-    // data: { city, region, country, org, timezone, loc, ... }
     return {
       city: data.city || null,
       region: data.region || null,
@@ -394,6 +481,7 @@ async function ipInfoLookup(ip) {
   }
 }
 
+// -------------------- ADMIN SAFETY: POST DETAILS --------------------
 app.get('/api/admin/posts/:id/details', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   const post = posts.find(p => p.id === id);
@@ -401,15 +489,13 @@ app.get('/api/admin/posts/:id/details', requireAdmin, async (req, res) => {
 
   const ua = post.ownerUa || "";
   const parsed = new UAParser(ua).getResult();
-
   const ip = post.ownerIp || "unknown";
   const geo = await ipInfoLookup(ip);
 
-  // Admin-only details response (never exposed to normal users)
   return res.json({
+    type: "post",
     postId: post.id,
     createdAt: post.ownerCreatedAt ? new Date(post.ownerCreatedAt).toISOString() : null,
-
     ip,
     device: {
       type: parsed.device && parsed.device.type ? parsed.device.type : "desktop/unknown",
@@ -424,26 +510,59 @@ app.get('/api/admin/posts/:id/details', requireAdmin, async (req, res) => {
       name: parsed.os && parsed.os.name ? parsed.os.name : null,
       version: parsed.os && parsed.os.version ? parsed.os.version : null
     },
-
     network: {
-      // best-effort hints; may be empty depending on tunnel/proxy
-      acceptLanguage: post.ownerHeaders.acceptLanguage || null,
-      cfRay: post.ownerHeaders.cfRay || null,
-      cfIpCountry: post.ownerHeaders.cfIpcountry || null,
-      referer: post.ownerHeaders.referer || null
+      acceptLanguage: post.ownerHeaders?.acceptLanguage || null,
+      cfRay: post.ownerHeaders?.cfRay || null,
+      cfIpCountry: post.ownerHeaders?.cfIpcountry || null,
+      referer: post.ownerHeaders?.referer || null
     },
+    geo: geo || { city: null, region: null, country: null, ispOrg: null, timezone: null },
+    notes: { privacy: "City/ISP require IPINFO_TOKEN. Otherwise null." }
+  });
+});
 
-    geo: geo ? geo : {
-      city: null,
-      region: null,
-      country: null,
-      ispOrg: null,
-      timezone: null
+// -------------------- ADMIN SAFETY: COMMENT DETAILS (NEW) --------------------
+app.get('/api/admin/posts/:postId/comments/:commentId/details', requireAdmin, async (req, res) => {
+  const postId = parseInt(req.params.postId);
+  const commentId = parseInt(req.params.commentId);
+
+  const post = posts.find(p => p.id === postId);
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  const comment = (post.comments || []).find(c => c.id === commentId);
+  if (!comment) return res.status(404).json({ error: "Comment not found" });
+
+  const ua = comment.commenterUa || "";
+  const parsed = new UAParser(ua).getResult();
+  const ip = comment.commenterIp || "unknown";
+  const geo = await ipInfoLookup(ip);
+
+  return res.json({
+    type: "comment",
+    postId,
+    commentId,
+    createdAt: null,
+    ip,
+    device: {
+      type: parsed.device && parsed.device.type ? parsed.device.type : "desktop/unknown",
+      vendor: parsed.device && parsed.device.vendor ? parsed.device.vendor : null,
+      model: parsed.device && parsed.device.model ? parsed.device.model : null
     },
-
-    notes: {
-      privacy: "City/ISP require a geo provider. Set IPINFO_TOKEN to enable lookup."
-    }
+    browser: {
+      name: parsed.browser && parsed.browser.name ? parsed.browser.name : null,
+      version: parsed.browser && parsed.browser.version ? parsed.browser.version : null
+    },
+    os: {
+      name: parsed.os && parsed.os.name ? parsed.os.name : null,
+      version: parsed.os && parsed.os.version ? parsed.os.version : null
+    },
+    network: {
+      acceptLanguage: comment.commenterHeaders?.acceptLanguage || null,
+      cfRay: comment.commenterHeaders?.cfRay || null,
+      cfIpCountry: comment.commenterHeaders?.cfIpcountry || null
+    },
+    geo: geo || { city: null, region: null, country: null, ispOrg: null, timezone: null },
+    notes: { privacy: "Comment safety is admin-only. City/ISP require IPINFO_TOKEN." }
   });
 });
 
